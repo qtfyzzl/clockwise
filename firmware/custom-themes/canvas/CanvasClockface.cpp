@@ -353,6 +353,22 @@ bool CanvasClockface::deserializeDefinition()
     File f = SPIFFS.open(localPath, FILE_READ);
     if (f)
     {
+      // 先按文件大小拦一道：doc 只有 16KB，超过必然解析失败。
+      // 必须在解析前判断 —— 否则 deserializeJson 吃满缓冲后失败，
+      // 老代码会「回落到远程」，去 raw.githubusercontent.com 拉同名主题，
+      // 那个 TLS 握手不受 setTimeout 控制，会把主循环整个堵死
+      // （现象：设备无响应、串口一行不打印，几分钟后才超时）。
+      const size_t fsize = f.size();
+      if (fsize == 0 || fsize > doc.capacity())
+      {
+        f.close();
+        Serial.printf("[Canvas] 主题 %s 有 %u 字节，超出缓冲 %u，拒绝加载\n",
+                      localPath.c_str(), (unsigned)fsize, (unsigned)doc.capacity());
+        Serial.println("[Canvas] 已跳过远程回落（本地有文件却解析不了时，远程只会卡死主循环）");
+        drawSplashScreen(0xC904, "Theme too big");
+        return false;
+      }
+
       DeserializationError localError = deserializeJson(doc, f);
       f.close();
       if (!localError)
@@ -363,7 +379,14 @@ bool CanvasClockface::deserializeDefinition()
                       doc["version"].as<const uint16_t>());
         return true;
       }
-      Serial.printf("[Canvas] 本地主题解析失败(%s)，回落到远程\n", localError.c_str());
+
+      // 本地文件存在但解析失败：直接报错，不回落远程。
+      // 回落远程在这里永远是错的 —— 本地都有文件了，远程同名主题要么不存在，
+      // 要么就是同一个坏文件，而请求本身会把主循环堵死。
+      Serial.printf("[Canvas] 本地主题解析失败(%s)，%u 字节\n",
+                    localError.c_str(), (unsigned)fsize);
+      drawSplashScreen(0xC904, "Theme broken");
+      return false;
     }
   }
 

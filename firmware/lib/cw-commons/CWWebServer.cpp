@@ -601,11 +601,21 @@ void ClockwiseWebServer::handleThemeUpload(WiFiClient &client, const String &nam
     return sendStatus(client, "HTTP/1.0 500 Internal Server Error");
   }
 
-  // 上传成功后顺手把当前主题指向它，前端就不用再单独设一次
+  // 上传成功后顺手把当前主题指向它，前端就不用再单独设一次。
+  // 但超过 JSON 缓冲的主题切换过去只会让屏幕停在报错页，
+  // 所以只存不切，让用户自己决定（前端也会在选文件时先拦一道）。
   ClockwiseParams *p = ClockwiseParams::getInstance();
   p->load();
-  p->canvasFile = name;
-  p->save();
+  if (contentLength <= MAX_THEME_JSON_BYTES)
+  {
+    p->canvasFile = name;
+    p->save();
+  }
+  else
+  {
+    Serial.printf("[FS] %s 有 %ld 字节，超过缓冲 %ld，已保存但未切换\n",
+                  name.c_str(), contentLength, (long)MAX_THEME_JSON_BYTES);
+  }
 
   Serial.printf("[FS] 主题已保存 %s (%ld 字节), SPIFFS 已用 %u/%u\n",
                 path.c_str(), contentLength,

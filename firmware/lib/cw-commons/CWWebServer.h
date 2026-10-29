@@ -30,6 +30,10 @@ struct ClockwiseWebServer
   static constexpr size_t WRITE_CHUNK = 2048;                // 每次 write 的字节数
   static constexpr size_t MAX_THEME_NAME = 40;
   static constexpr long MAX_UPLOAD_BYTES = 60000;
+  // 主题 JSON 的解析缓冲上限（ArduinoJson 把字符串复制进池子）。
+  // 必须与 CanvasClockface 里 doc 的容量一致 —— 那边用 doc.capacity() 自查，
+  // 这里用来决定"上传后要不要自动切换当前主题"。
+  static constexpr long MAX_THEME_JSON_BYTES = 16384;
   static constexpr unsigned long UPLOAD_IDLE_TIMEOUT_MS = 8000;
 
   // 固件里编进去的主题引擎清单，格式每行 "id|显示名"，由 main.cpp 在 setup() 里填。

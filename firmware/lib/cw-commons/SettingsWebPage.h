@@ -641,6 +641,15 @@ function uploadTheme(input){
     status.style.color = '#c0392b';
     return;
   }
+
+  // 先按字节数拦一道：设备的 JSON 解析缓冲只有 16KB，超了必然加载失败，
+  // 而且切换过去会让屏幕停在报错页（以前还会连带主循环卡死）。
+  if (file.size > 16384) {
+    status.style.color = '#c0392b';
+    status.textContent = '这个文件 ' + (file.size / 1024).toFixed(1) + ' KB，' +
+      '超过设备 16 KB 解析缓冲，无法加载。请精简后再传（减帧数或缩小图片）。';
+    return;
+  }
   nameEl.value = name;
 
   var reader = new FileReader();

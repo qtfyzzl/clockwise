@@ -4,7 +4,12 @@
 #include "mbedtls/base64.h"
 #include <PNGdec.h>
 
-#define IMAGE_BUFFER_SIZE 1024
+// 单张图片 base64 解码后的缓冲。
+// 上游是 1024，实测官方主题库里有 3 个超了：amazon(2802B)、bugcat-1(2232B)、
+// mymelo-1(1208B)。超限时 mbedtls 返回 -42(BUFFER_TOO_SMALL)，而上游没检查返回值，
+// 会拿着"需要的长度"去读一块更小的缓冲 —— 越界读。
+// 提到 4096 后 33 个官方主题全部可渲染，代价是 3KB 静态 RAM。
+#define IMAGE_BUFFER_SIZE 4096
 
 // PNGdec 的 PNG 结构体自带 4 个内嵌缓冲：
 //   ucZLIB[32768 + sizeof(inflate_state)]  ~34KB （作者注释：为了避免 malloc/free）

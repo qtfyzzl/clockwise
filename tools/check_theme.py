@@ -21,7 +21,7 @@ import sys
 
 # ---- 设备端硬限制 ----
 MAX_FILE_BYTES = 16 * 1024      # DynamicJsonDocument 16384
-MAX_IMAGE_BYTES = 1024          # IMAGE_BUFFER_SIZE
+MAX_IMAGE_BYTES = 4096          # IMAGE_BUFFER_SIZE（设备端已从 1024 提到 4096）
 MAX_IMAGE_W = 64
 MAX_IMAGE_H = 64
 MAX_THEME_PIXELS = 40000        # 精灵总像素预算（RAM 保护的经验值）

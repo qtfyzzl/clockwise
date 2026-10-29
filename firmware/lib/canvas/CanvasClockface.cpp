@@ -1,5 +1,6 @@
 
 #include "CanvasClockface.h"
+#include "PNGRender.h"
 #include <SPIFFS.h>
 
 // static：两个主题同时编译时，同名的文件级全局会在链接期冲突
@@ -19,7 +20,7 @@ CanvasClockface::CanvasClockface(Adafruit_GFX *display)
 
   // 关键：在 WiFi 启动之前先把 48KB 的 PNG 缓冲抢下来。
   // setup() 里才分配的话，WiFi 栈已经把堆切碎，new PNG() 会失败（图片/精灵全废）。
-  pngHandle();
+  reservePngBuffers();
 }
 
 void CanvasClockface::setup(CWDateTime *dateTime)

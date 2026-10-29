@@ -5,8 +5,11 @@
   正常模式: x=7  y=10  w=10 h=20 t=2 gap=3 colon=4   日期 y=52
   大数字模式: x=1  y=16  w=13 h=32 t=3 gap=3 colon=4
 """
-import struct
-import zlib
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pngkit          # PNG 读写统一在 pngkit 里
 
 SEG_A, SEG_B, SEG_C, SEG_D, SEG_E, SEG_F, SEG_G = 1, 2, 4, 8, 16, 32, 64
 DIGIT_SEG = [0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F]
@@ -28,26 +31,14 @@ class Canvas:
                     self.px[yy][xx] = c
 
     def png(self, scale=8):
+        """放大 scale 倍后编码成 PNG（最近邻，保持清晰像素块）。"""
         W, H = self.w * scale, self.h * scale
-        rows = []
+        buf = bytearray()
         for y in range(H):
-            row = bytearray([0])
             sy = y // scale
             for x in range(W):
-                r, g, b = self.px[sy][x // scale]
-                row += bytes((r, g, b))
-            rows.append(bytes(row))
-        raw = b"".join(rows)
-
-        def chunk(tag, data):
-            return (struct.pack(">I", len(data)) + tag + data
-                    + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF))
-
-        return (b"\x89PNG\r\n\x1a\n"
-                + chunk(b"IHDR", struct.pack(">IIBBBBB", W, H, 8, 2, 0, 0, 0))
-                + chunk(b"IDAT", zlib.compress(raw, 9))
-                + chunk(b"IEND", b""))
-
+                buf += bytes(self.px[sy][x // scale])
+        return pngkit.encode_rgb(W, H, bytes(buf))
 
 def draw_digit(cv, x, y, w, h, t, digit, color):
     mask = DIGIT_SEG[digit % 10]

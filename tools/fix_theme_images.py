@@ -23,132 +23,13 @@ import struct
 import sys
 import zlib
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pngkit          # PNG 读写统一在 pngkit 里（设备只支持 8-bit RGB）
+
 PNG_SIG = b"\x89PNG\r\n\x1a\n"
 
 
 # ---------------- PNG 解码 ----------------
-def _paeth(a, b, c):
-    p = a + b - c
-    pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
-    if pa <= pb and pa <= pc:
-        return a
-    return b if pb <= pc else c
-
-
-def decode_png(raw):
-    """返回 (width, height, 像素列表[(r,g,b,a)]) ；不支持隔行"""
-    if raw[:8] != PNG_SIG:
-        raise ValueError("不是 PNG")
-
-    pos = 8
-    w = h = bd = ct = interlace = None
-    plte = b""
-    trns = b""
-    idat = b""
-    while pos + 8 <= len(raw):
-        ln = struct.unpack(">I", raw[pos:pos + 4])[0]
-        typ = raw[pos + 4:pos + 8]
-        data = raw[pos + 8:pos + 8 + ln]
-        if typ == b"IHDR":
-            w, h, bd, ct, _comp, _filt, interlace = struct.unpack(">IIBBBBB", data)
-        elif typ == b"PLTE":
-            plte = data
-        elif typ == b"tRNS":
-            trns = data
-        elif typ == b"IDAT":
-            idat += data
-        elif typ == b"IEND":
-            break
-        pos += 12 + ln
-
-    if interlace:
-        raise ValueError("不支持隔行(interlaced) PNG")
-
-    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[ct]
-    bits_per_pixel = channels * bd
-    bpp = max(1, bits_per_pixel // 8)              # 过滤用的每像素字节数
-    stride = (w * bits_per_pixel + 7) // 8         # 每行字节数
-
-    data = zlib.decompress(idat)
-
-    # 反过滤
-    rows = []
-    prev = bytearray(stride)
-    p = 0
-    for _ in range(h):
-        ftype = data[p]; p += 1
-        line = bytearray(data[p:p + stride]); p += stride
-        if ftype == 1:
-            for i in range(bpp, stride):
-                line[i] = (line[i] + line[i - bpp]) & 0xFF
-        elif ftype == 2:
-            for i in range(stride):
-                line[i] = (line[i] + prev[i]) & 0xFF
-        elif ftype == 3:
-            for i in range(stride):
-                a = line[i - bpp] if i >= bpp else 0
-                line[i] = (line[i] + ((a + prev[i]) >> 1)) & 0xFF
-        elif ftype == 4:
-            for i in range(stride):
-                a = line[i - bpp] if i >= bpp else 0
-                c = prev[i - bpp] if i >= bpp else 0
-                line[i] = (line[i] + _paeth(a, prev[i], c)) & 0xFF
-        elif ftype != 0:
-            raise ValueError(f"未知过滤类型 {ftype}")
-        rows.append(line)
-        prev = line
-
-    # 展开成 RGBA
-    pixels = []
-    for line in rows:
-        if bd == 8:
-            if ct == 3:
-                pixels += [(plte[i * 3], plte[i * 3 + 1], plte[i * 3 + 2],
-                            0 if (trns and i < len(trns) and trns[i] == 0) else 255) for i in line[:w]]
-            elif ct == 2:
-                pixels += [(line[i * 3], line[i * 3 + 1], line[i * 3 + 2], 255) for i in range(w)]
-            elif ct == 6:
-                pixels += [(line[i * 4], line[i * 4 + 1], line[i * 4 + 2], line[i * 4 + 3]) for i in range(w)]
-            elif ct == 0:
-                pixels += [(line[i], line[i], line[i], 255) for i in range(w)]
-            elif ct == 4:
-                pixels += [(line[i * 2], line[i * 2], line[i * 2], line[i * 2 + 1]) for i in range(w)]
-        else:  # bd in (1, 2, 4) —— 每字节装多个像素
-            per_byte = 8 // bd
-            mask = (1 << bd) - 1
-            for x in range(w):
-                byte = line[x // per_byte]
-                shift = 8 - bd * (x % per_byte + 1)
-                idx = (byte >> shift) & mask
-                if ct == 3:
-                    pixels.append((plte[idx * 3], plte[idx * 3 + 1], plte[idx * 3 + 2],
-                                   0 if (trns and idx < len(trns) and trns[idx] == 0) else 255))
-                else:  # 灰度 sub-byte
-                    v = idx * 255 // mask
-                    pixels.append((v, v, v, 255))
-    return w, h, pixels
-
-
-# ---------------- PNG 编码（8-bit RGB） ----------------
-def encode_png_rgb(w, h, pixels):
-    def chunk(typ, data):
-        return (struct.pack(">I", len(data)) + typ + data +
-                struct.pack(">I", zlib.crc32(typ + data) & 0xFFFFFFFF))
-
-    ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)   # 8-bit, color type 2 (RGB)
-
-    raw = bytearray()
-    for y in range(h):
-        raw.append(0)                                      # 过滤类型 0
-        for x in range(w):
-            px = pixels[y * w + x]
-            raw += bytes(px[:3])                           # 兼容 3 元组(已填背景)与 4 元组
-
-    return (PNG_SIG + chunk(b"IHDR", ihdr) +
-            chunk(b"IDAT", zlib.compress(bytes(raw), 9)) +
-            chunk(b"IEND", b""))
-
-
 def rgb565_to_rgb(v):
     v = int(v) & 0xFFFF
     return (((v >> 11) & 0x1F) * 255 // 31,
@@ -190,7 +71,7 @@ def main():
                     continue
 
             try:
-                w, h, px = decode_png(raw)
+                w, h, px = pngkit.decode(raw)
             except Exception as e:
                 print(f"  ⚠️  跳过一帧: {e}")
                 skipped += 1
@@ -199,7 +80,7 @@ def main():
 
             # 透明像素填成主题背景色
             filled = [(r, g, b) if a >= 128 else bg for (r, g, b, a) in px]
-            new_png = encode_png_rgb(w, h, filled)
+            new_png = pngkit.encode_rgb(w, h, filled)
             new_b64 = base64.b64encode(new_png).decode("ascii")
             fr["image"] = new_b64
             after_total += len(new_b64)

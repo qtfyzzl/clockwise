@@ -19,6 +19,9 @@ import os
 import struct
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pngkit          # PNG 读写统一在 pngkit 里
+
 # ---- 设备端硬限制 ----
 MAX_FILE_BYTES = 16 * 1024      # DynamicJsonDocument 16384
 MAX_IMAGE_BYTES = 4096          # IMAGE_BUFFER_SIZE（设备端已从 1024 提到 4096）
@@ -29,25 +32,6 @@ MAX_THEME_PIXELS = 40000        # 精灵总像素预算（RAM 保护的经验值
 ALLOWED_TYPES = {"text", "datetime", "image", "rect", "fillrect", "line", "sprite"}
 
 CT_NAME = {0: "灰度(0)", 2: "RGB(2)", 3: "调色板(3)", 4: "灰度+Alpha(4)", 6: "RGBA(6)"}
-
-
-def parse_png(raw):
-    """返回 (宽, 高, 位深, 颜色类型, PLTE字节数) ；非 PNG 返回 None"""
-    if len(raw) < 33 or raw[:8] != b"\x89PNG\r\n\x1a\n":
-        return None
-    w, h = struct.unpack(">II", raw[16:24])
-    bitdepth, colortype = raw[24], raw[25]
-    plte = 0
-    i = 8
-    while i + 8 <= len(raw):
-        ln = struct.unpack(">I", raw[i:i + 4])[0]
-        typ = raw[i + 4:i + 8]
-        if typ == b"PLTE":
-            plte = ln
-        i += 12 + ln
-        if typ == b"IEND":
-            break
-    return w, h, bitdepth, colortype, plte
 
 
 def check_file(path):
@@ -116,7 +100,7 @@ def check_file(path):
                 problems.append(
                     f"sprites[{gi}][{fi}] 不是 PNG（检测到 {kind}）→ 设备只支持 PNG")
                 continue
-            info = parse_png(raw)
+            info = pngkit.info(raw)
             if info is None:
                 problems.append(f"sprites[{gi}][{fi}] PNG 头损坏")
                 continue

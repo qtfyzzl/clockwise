@@ -102,6 +102,30 @@ clockwise/
 └── docs/ARCHITECTURE.md        # upstream 架构文档
 ```
 
+### 空中升级（OTA）
+
+分区表用 `firmware/partitions_ota.csv`（不是 upstream 的 huge_app.csv）：
+
+```
+nvs 20K | otadata 8K | app0 1.81M | app1 1.81M | spiffs 256K | coredump 64K
+```
+
+两条通道，都不需要按 BOOT：
+
+```bash
+# 1. 命令行
+pio run -e ota -t upload --upload-port 192.168.137.216
+
+# 2. 设置页最下面「OTA 空中升级」选 dist/firmware.bin
+```
+
+实测（2026-10-29）：1.66MB 固件一次 20~33 秒，速度 52~85 KB/s，
+两次分别写入 app1 / app0，SPIFFS 主题一个没丢。
+上传中断会在 30 秒后 abort 并继续用旧分区，不会变砖。
+
+⚠️ 注意：固件现在占 1.81MB 分区的 88.7%，只剩 215KB 代码空间。
+再加功能要先看 `pio run -e esp32dev` 的 Flash 百分比。
+
 ### 主题是怎么"选中"的
 
 > **2026-10-29 更新：这个"只能有一个"的限制已经解除了。**

@@ -97,15 +97,28 @@ def check_file(path):
             problems.append(f"sprites[{gi}] 不是数组")
             continue
         for fi, fr in enumerate(group):
-            b64 = fr.get("image") if isinstance(fr, dict) else None
+            if not isinstance(fr, dict) or "image" not in fr:
+                problems.append(f"sprites[{gi}][{fi}] 缺少 image 字段")
+                continue
+            b64 = fr["image"]
             if not b64:
-                problems.append(f"sprites[{gi}][{fi}] 没有 image 字段")
+                # 空字符串是「这一帧不绘制」（用于停顿），属于正常写法
+                warnings.append(f"sprites[{gi}][{fi}] 是空帧（不绘制），仅作停顿")
                 continue
             frame_count += 1
             raw = base64.b64decode(b64 + "=" * (-len(b64) % 4))
+            # 必须先验签名：JPEG 按 PNG 的偏移去读也能读出"数字"来，
+            # 会得到 bit depth=69、宽 4718592 这种垃圾值，反而蒙混过关。
+            if not raw.startswith(b"\x89PNG\r\n\x1a\n"):
+                kind = ("JPEG" if raw.startswith(b"\xff\xd8\xff") else
+                        "GIF" if raw.startswith(b"GIF8") else
+                        "BMP" if raw.startswith(b"BM") else "未知格式")
+                problems.append(
+                    f"sprites[{gi}][{fi}] 不是 PNG（检测到 {kind}）→ 设备只支持 PNG")
+                continue
             info = parse_png(raw)
             if info is None:
-                problems.append(f"sprites[{gi}][{fi}] 不是合法 PNG")
+                problems.append(f"sprites[{gi}][{fi}] PNG 头损坏")
                 continue
             w, h, bd, ct, plte = info
             total_px += w * h

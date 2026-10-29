@@ -91,7 +91,21 @@ static bool openImage(const char *base64Image)
                                     (const unsigned char *)base64Image, strlen(base64Image));
   if (b64rc != 0 || decodedArrayLength == 0)
   {
-    Serial.printf("[Canvas] base64 解码失败 rc=%d len=%u\n", b64rc, (unsigned)decodedArrayLength);
+    // -42 = MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL：解码后体积超过 IMAGE_BUFFER_SIZE。
+    // 注意 mbedtls 失败时会把 decodedArrayLength 改成「需要的长度」，
+    // 上游没检查返回值就拿这个长度去读缓冲 —— 越界读，所以这里必须拦。
+    Serial.printf("[Canvas] base64 解码失败 rc=%d 需要 %u 字节（上限 %u）\n",
+                  b64rc, (unsigned)decodedArrayLength, (unsigned)IMAGE_BUFFER_SIZE);
+    return false;
+  }
+
+  // 先验签名再交给解码器：主题里可能混入 JPEG（官方 amazon 主题就有一张），
+  // 不检查的话 openRAM 会失败但说不清原因。
+  if (!(decodedArray[0] == 0x89 && decodedArray[1] == 'P' &&
+        decodedArray[2] == 'N' && decodedArray[3] == 'G'))
+  {
+    Serial.printf("[Canvas] 图片不是 PNG（首字节 %02X %02X），已跳过\n",
+                  decodedArray[0], decodedArray[1]);
     return false;
   }
 

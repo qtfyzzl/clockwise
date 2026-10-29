@@ -283,6 +283,10 @@ void setup()
   // 主题引擎由 NVS 决定，不再是编译期常量
   const String engine = ClockwiseParams::getInstance()->clockfaceEngine;
   ClockwiseWebServer::getInstance()->clockfaceName = engineClockfaceId(engine);
+  // 告诉设置页这个固件里编进了哪些引擎（cw-commons 看不到链接了哪些主题）
+  ClockwiseWebServer::getInstance()->engineCatalog =
+      "canvas|画布模式（Canvas）\n"
+      "native-mario|Mario（原生）\n";
   Serial.printf("[App] 主题引擎: %s（对应 %s）\n", engine.c_str(), engineClockfaceId(engine));
 
   // 尽早恢复时间：没有网络时系统时间是 1970，离线页面就只能显示 --:--

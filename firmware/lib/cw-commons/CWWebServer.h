@@ -32,6 +32,9 @@ struct ClockwiseWebServer
   static constexpr long MAX_UPLOAD_BYTES = 60000;
   static constexpr unsigned long UPLOAD_IDLE_TIMEOUT_MS = 8000;
 
+  // 固件里编进去的主题引擎清单，格式每行 "id|显示名"，由 main.cpp 在 setup() 里填。
+  const char *engineCatalog = nullptr;
+
   // 当前编译进来的主题名。不能用 CLOCKFACE_NAME 宏：该宏定义在主题库的
   // Clockface.h 里，而 cw-commons 是独立编译的库，预处理时看不到它，
   // 永远落到 "UNKNOWN"。由 main.cpp 在 setup() 里把真实值赋进来。
@@ -72,6 +75,7 @@ private:
   void sendSettingsPage(WiFiClient &client);
   void getCurrentSettings(WiFiClient &client);
   void listThemes(WiFiClient &client);
+  void listEngines(WiFiClient &client);
   void sendThemeFile(WiFiClient &client, const String &name);
   void handleThemeUpload(WiFiClient &client, const String &name);
   void handleThemeDelete(WiFiClient &client, const String &name);

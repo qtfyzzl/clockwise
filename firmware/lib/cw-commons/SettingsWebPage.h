@@ -512,14 +512,35 @@ function formatStorage(){
   });
 }
 
+// 渲染引擎列表（数据来自 /engines，每行 "id|显示名"）
+function renderEngineList(){
+  var box = document.getElementById('engineList');
+  if (!box) return;
+  requestGet('/engines', function(req){
+    var txt = (req && req.responseText) || '';
+    var cur = (S['clockfaceengine'] || 'canvas');
+    var lines = txt.split(/\r?\n/).map(function(s){ return s.trim(); })
+                   .filter(function(s){ return s.length; });
+    if (!lines.length) {
+      box.innerHTML = '<span class="hint">固件没有报告任何引擎</span>';
+      return;
+    }
+    box.innerHTML = lines.map(function(line){
+      var p = line.split('|');
+      var id = p[0], nm = p[1] || p[0];
+      var on = (id === cur);
+      return '<button class="' + (on ? 'primary' : 'ghost') + '"' +
+             (on ? '' : ' onclick="pickEngine(\'' + id + '\')"') + '>' +
+             esc(nm) + (on ? ' · 使用中' : '') + '</button>';
+    }).join('');
+  });
+}
+
 // 切换主题引擎（写 NVS，重启生效）
-function pickEngine(v){
-  var name = (v === 'canvas') ? '画布模式' : '原生模式';
-  if (!confirm('切换到「' + name + '」需要重启设备，确定？')) {
-    document.getElementById('engineSel').value = (S['clockfaceengine'] || 'canvas');
-    return;
-  }
-  setPref('clockfaceEngine', v);
+function pickEngine(id){
+  if (id === (S['clockfaceengine'] || 'canvas')) return;
+  if (!confirm('切换到「' + id + '」需要重启设备，确定？')) return;
+  setPref('clockfaceEngine', id);
   setTimeout(function(){
     if (confirm('已切换，现在重启生效？')) restartDevice();
   }, 700);
@@ -732,20 +753,16 @@ function render(){
   html += '</div>';
 
   /* ---------- 主题引擎（始终显示，决定下面显示哪一组） ---------- */
-  var engine = (S['clockfaceengine'] || 'canvas');
   html += '<div class="group"><h2>主题引擎</h2><span>决定用哪种方式渲染画面，切换后重启生效</span></div><div class="grid">';
 
-  html += card('渲染模式',
-    '<b>画布模式</b>：运行时解析设备闪存里的 JSON 主题。可以上传、切换任意主题，' +
-    '但受 16KB 缓冲和堆内存限制（复杂主题放不下）。<br>' +
-    '<b>原生模式</b>：图片是编译进 Flash 的原始像素，运行时几乎不占内存、' +
-    '动画更流畅，但只能用固件内置的那几套。',
-    '<select id="engineSel" onchange="pickEngine(this.value)">' +
-      [['canvas','画布模式（Canvas）— 可上传自定义主题'],
-       ['native-mario','原生模式 — Mario（Flash 内置，零内存开销）']]
-      .map(function(o){ return '<option value="' + o[0] + '"' + (engine === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; })
-      .join('') +
-    '</select>',
+  html += card('渲染方式',
+    '下面列出这个固件里内置的全部引擎，点一个即切换。<br>' +
+    '<b>画布模式</b>：运行时解析闪存里的 JSON 主题，可以上传任意主题，' +
+    '但受 16KB 缓冲和堆限制。<br>' +
+    '<b>原生模式</b>：图片编译进 Flash，运行时几乎不占内存、动画更流畅，' +
+    '但只能选固件内置的那些。',
+    '<div id="engineList" style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<span class="hint">读取中…</span></div>',
     null);
 
   html += '</div>';
@@ -845,6 +862,7 @@ function render(){
     refreshThemes();
     previewTheme(S['canvasfile'] || '');
   }
+  renderEngineList();
 }
 
 /* ============ 启动 ============ */

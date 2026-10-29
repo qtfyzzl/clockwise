@@ -251,6 +251,8 @@ void ClockwiseWebServer::processRequest(WiFiClient &client, const String &method
       return getCurrentSettings(client);
     if (path == "/themes")
       return listThemes(client);
+    if (path == "/engines")
+      return listEngines(client);       // 可用主题引擎（原生 + 画布）
     if (path == "/theme")
       return sendThemeFile(client, value);       // 回读原文，设置页做预览用
     if (path == "/read" && key == "pin")
@@ -350,6 +352,8 @@ void ClockwiseWebServer::applySetting(const String &key, const String &value)
     p->E_pin = value.toInt();
   else if (key == p->PREF_AUTO_ROTATE)
     p->autoRotate = (value == "1");
+  else if (key == p->PREF_CLOCKFACE_ENGINE)
+    p->clockfaceEngine = value;   // canvas / native-mario，重启生效
   else if (key == "autoBright")                 // 形如 autoBright=0010,0800
   {
     p->autoBrightMin = value.substring(0, 4).toInt();
@@ -379,6 +383,20 @@ void ClockwiseWebServer::sendSettingsPage(WiFiClient &client)
   client.println();
 
   writeChunked(client, SETTINGS_PAGE_GZ, SETTINGS_PAGE_GZ_LEN, WRITE_TIMEOUT_MS);
+}
+
+// 列出固件里编进去的主题引擎，每行 "id|显示名"。
+// 数据由 main.cpp 在 setup() 里填进 engineCatalog —— cw-commons 是独立编译的库，
+// 看不到工程里链接了哪些主题。
+void ClockwiseWebServer::listEngines(WiFiClient &client)
+{
+  client.println("HTTP/1.0 200 OK");
+  client.println("Content-Type: text/plain; charset=utf-8");
+  client.println("Cache-Control: no-store");
+  client.println();
+  if (engineCatalog != nullptr)
+    client.print(engineCatalog);
+  client.println();
 }
 
 void ClockwiseWebServer::listThemes(WiFiClient &client)

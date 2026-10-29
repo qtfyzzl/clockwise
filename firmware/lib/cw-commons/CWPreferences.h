@@ -24,6 +24,8 @@ struct ClockwiseParams
     const char* const PREF_NTP_SERVER = "ntpServer";
     const char* const PREF_CANVAS_FILE = "canvasFile";
     const char* const PREF_CANVAS_SERVER = "canvasServer";
+    const char* const PREF_AUTO_ROTATE = "autoRotate";
+    const char* const PREF_LAST_EPOCH = "lastEpoch";
     const char* const PREF_MANUAL_POSIX = "manualPosix";
     const char* const PREF_CACHED_POSIX = "cachedPosix";
     const char* const PREF_CACHED_TZ = "cachedTz";
@@ -45,6 +47,10 @@ struct ClockwiseParams
     String ntpServer;
     String canvasFile;
     String canvasServer;
+    bool autoRotate;
+    // 最后一次已知正确的 UTC 时间戳（秒）。没网启动时用它恢复时间，
+    // 否则系统时间是 1970，离线页面只能显示 --:--。
+    uint32_t lastEpoch;
     String manualPosix;
     String cachedPosix;
     String cachedTz;
@@ -79,6 +85,8 @@ struct ClockwiseParams
         preferences.putString(PREF_NTP_SERVER, ntpServer);
         preferences.putString(PREF_CANVAS_FILE, canvasFile);
         preferences.putString(PREF_CANVAS_SERVER, canvasServer);
+        preferences.putBool(PREF_AUTO_ROTATE, autoRotate);
+        preferences.putULong(PREF_LAST_EPOCH, lastEpoch);
         preferences.putString(PREF_MANUAL_POSIX, manualPosix);
         preferences.putString(PREF_CACHED_POSIX, cachedPosix);
         preferences.putString(PREF_CACHED_TZ, cachedTz);
@@ -95,7 +103,10 @@ struct ClockwiseParams
         use24hFormat = preferences.getBool(PREF_USE_24H_FORMAT, true);
         displayBright = preferences.getUInt(PREF_DISPLAY_BRIGHT, 32);
         autoBrightMin = preferences.getUInt(PREF_DISPLAY_ABC_MIN, 0);
-        autoBrightMax = preferences.getUInt(PREF_DISPLAY_ABC_MAX, 0);
+        // 默认开启自动亮度：0 = 关闭（见 main.cpp 的 autoBrightEnabled）。
+        // 800 是上游 wiki 在 GL5539 + 10k 分压下的实测推荐值：
+        // 全暗约 40，全亮约 3700，取 800 作为"已足够亮"的拐点。
+        autoBrightMax = preferences.getUInt(PREF_DISPLAY_ABC_MAX, 800);
         ldrPin = preferences.getUInt(PREF_LDR_PIN, 35);        
         timeZone = preferences.getString(PREF_TIME_ZONE, "America/Sao_Paulo");
         wifiSsid = preferences.getString(PREF_WIFI_SSID, "");
@@ -103,6 +114,8 @@ struct ClockwiseParams
         ntpServer = preferences.getString(PREF_NTP_SERVER, "time.google.com");
         canvasFile = preferences.getString(PREF_CANVAS_FILE, "");
         canvasServer = preferences.getString(PREF_CANVAS_SERVER, "raw.githubusercontent.com");
+        autoRotate = preferences.getBool(PREF_AUTO_ROTATE, false);
+        lastEpoch = preferences.getULong(PREF_LAST_EPOCH, 0);
         manualPosix = preferences.getString(PREF_MANUAL_POSIX, "");
         cachedPosix = preferences.getString(PREF_CACHED_POSIX, "");
         cachedTz = preferences.getString(PREF_CACHED_TZ, "");

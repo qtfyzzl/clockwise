@@ -11,3 +11,19 @@ sdkconfig*
 .vscode
 
 dependencies.lock
+
+# ---- 本地开发产物（本项目定制部分）----
+# 构建日志：每次编译都生成，无版本价值
+*.log
+
+# 烧录产物：每个合并镜像 1.5MB 以上，可由 dist/flash.ps1 重新生成
+dist/*.bin
+dist/*.elf
+
+# 编辑器打包输出与压缩包（11MB PyInstaller 产物，源码在 editor/ 下）
+editor/dist/
+editor.zip
+
+# Python 缓存
+__pycache__/
+*.pyc

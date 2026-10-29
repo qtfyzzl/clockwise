@@ -12,3 +12,10 @@ void Sprite::logPosition() {
   Serial.print("x = "); Serial.print(_x); Serial.print(", y = "); Serial.print(_y); 
   Serial.print(", w = "); Serial.print(_width); Serial.print(", h = "); Serial.println(_height);
 }
+
+// Base implementation. Sprite::name() is the class' key function: without a
+// definition the vtable is never emitted and every subclass fails to link
+// ("undefined reference to vtable for Sprite").
+const char* Sprite::name() {
+  return "Sprite";
+}

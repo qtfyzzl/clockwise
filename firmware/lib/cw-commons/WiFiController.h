@@ -85,7 +85,9 @@ struct WiFiController
       if (elapsedTimeOffline == 0 && !connectionSucessfulOnce)
         elapsedTimeOffline = millis();
       
-      if ((millis() - elapsedTimeOffline) > 1000 * 60 * 5)  // restart if clockface is not showed and is 5min offline 
+      // 上游是 5 分钟就重启。但我们支持「离线简约时钟 + 每分钟重连」，
+      // 频繁重启会把离线时钟打断，所以放宽到 60 分钟只当作兜底。
+      if ((millis() - elapsedTimeOffline) > 1000UL * 60UL * 60UL)
         StatusController::getInstance()->forceRestart();
 
       return false;
@@ -120,6 +122,14 @@ struct WiFiController
   {
     // Persist first: covers the portal path (Improv already saved its own).
     persistCredentials(WiFi.SSID().c_str(), WiFi.psk().c_str());
+
+    // 关掉 WiFi 省电（modem sleep）。开省电时实测局域网 ping 抖动到 200~700ms，
+    // TCP 吞吐被 RTT 限制在 10KB/s 量级，31KB 的设置页根本加载不完。
+    // 挂钟走 USB 供电，不差这点电。
+    // 连 set 两次：WiFiManager 在配网流程结束后有可能把 PS 状态改回去。
+    WiFi.setSleep(WIFI_PS_NONE);
+    delay(30);
+    WiFi.setSleep(WIFI_PS_NONE);
 
     WiFiManager &wm = wifiManager();
     if (wm.getConfigPortalActive())

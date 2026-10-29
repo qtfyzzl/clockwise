@@ -1,0 +1,45 @@
+{
+  "name": "Custom Minimal",
+  "version": 1,
+  "author": "@you",
+  "bgColor": 0,
+  "delay": 300,
+  "setup": [
+    {
+      "type": "rect",
+      "color": 8452,
+      "x": 1,
+      "y": 1,
+      "width": 62,
+      "height": 62
+    },
+    {
+      "type": "line",
+      "color": 12678,
+      "x": 10,
+      "y": 30,
+      "x1": 54,
+      "y1": 30
+    },
+    {
+      "type": "datetime",
+      "content": "H:i",
+      "font": "big",
+      "fgColor": 65535,
+      "bgColor": 0,
+      "x": 11,
+      "y": 21
+    },
+    {
+      "type": "datetime",
+      "content": "m-d",
+      "font": "picopixel",
+      "fgColor": 1625,
+      "bgColor": 0,
+      "x": 23,
+      "y": 42
+    }
+  ],
+  "sprites": [],
+  "loop": []
+}

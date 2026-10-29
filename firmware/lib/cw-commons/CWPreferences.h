@@ -23,6 +23,7 @@ struct ClockwiseParams
     const char* const PREF_WIFI_PASSWORD = "wifiPwd";
     const char* const PREF_NTP_SERVER = "ntpServer";
     const char* const PREF_CANVAS_FILE = "canvasFile";
+    const char* const PREF_CLOCKFACE_ENGINE = "clockfaceEngine";
     const char* const PREF_CANVAS_SERVER = "canvasServer";
     const char* const PREF_AUTO_ROTATE = "autoRotate";
     const char* const PREF_LAST_EPOCH = "lastEpoch";
@@ -46,6 +47,11 @@ struct ClockwiseParams
     String wifiPwd;
     String ntpServer;
     String canvasFile;
+    // 主题引擎："canvas"（解析 JSON，可上传任意主题）
+    // 或 "native-mario"（图片编译进 flash，零 RAM 开销）
+    String clockfaceEngine;
+    // 主题引擎："canvas"（解析 JSON，可上传任意主题）
+    // 或 "native-mario"（图片编译进 flash，零 RAM 开销）
     String canvasServer;
     bool autoRotate;
     // 最后一次已知正确的 UTC 时间戳（秒）。没网启动时用它恢复时间，
@@ -92,6 +98,8 @@ struct ClockwiseParams
         preferences.putString(PREF_WIFI_PASSWORD, wifiPwd);
         preferences.putString(PREF_NTP_SERVER, ntpServer);
         preferences.putString(PREF_CANVAS_FILE, canvasFile);
+        preferences.putString(PREF_CLOCKFACE_ENGINE, clockfaceEngine);
+        preferences.putString(PREF_CLOCKFACE_ENGINE, clockfaceEngine);
         preferences.putString(PREF_CANVAS_SERVER, canvasServer);
         preferences.putBool(PREF_AUTO_ROTATE, autoRotate);
         preferences.putULong(PREF_LAST_EPOCH, lastEpoch);
@@ -121,6 +129,10 @@ struct ClockwiseParams
         wifiPwd = preferences.getString(PREF_WIFI_PASSWORD, "");
         ntpServer = preferences.getString(PREF_NTP_SERVER, "time.google.com");
         canvasFile = preferences.getString(PREF_CANVAS_FILE, "");
+        // 默认沿用 Canvas：老设备升级后行为不变
+        clockfaceEngine = preferences.getString(PREF_CLOCKFACE_ENGINE, "canvas");
+        // 默认沿用 Canvas：老设备升级后行为不变
+        clockfaceEngine = preferences.getString(PREF_CLOCKFACE_ENGINE, "canvas");
         canvasServer = preferences.getString(PREF_CANVAS_SERVER, "raw.githubusercontent.com");
         autoRotate = preferences.getBool(PREF_AUTO_ROTATE, false);
         lastEpoch = preferences.getULong(PREF_LAST_EPOCH, 0);

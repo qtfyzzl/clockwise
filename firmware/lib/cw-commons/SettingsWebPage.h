@@ -512,6 +512,19 @@ function formatStorage(){
   });
 }
 
+// 切换主题引擎（写 NVS，重启生效）
+function pickEngine(v){
+  var name = (v === 'canvas') ? '画布模式' : '原生模式';
+  if (!confirm('切换到「' + name + '」需要重启设备，确定？')) {
+    document.getElementById('engineSel').value = (S['clockfaceengine'] || 'canvas');
+    return;
+  }
+  setPref('clockfaceEngine', v);
+  setTimeout(function(){
+    if (confirm('已切换，现在重启生效？')) restartDevice();
+  }, 700);
+}
+
 function refreshThemes(){
   var sel = document.getElementById('themeList');
   if (!sel) return;
@@ -595,9 +608,10 @@ function render(){
   document.getElementById('chip-fw').innerHTML   = '固件 <b>' + esc(S['cw_fw_version'] || '—') + '</b>';
   document.getElementById('chip-ssid').innerHTML = 'WiFi <b>' + esc(S['wifissid'] || '未连接') + '</b>';
   // 顶栏显示"当前实际在用的主题"：Canvas 引擎下是 canvasFile，其它引擎直接显示引擎名
+  var engineNow = (S['clockfaceengine'] || 'canvas');
   var themeLabel = (CLOCKFACE === 'cw-cf-0x07')
       ? (S['canvasfile'] || '未选择')
-      : (CLOCKFACE || '—');
+      : (engineNow === 'native-mario' ? 'Mario（原生）' : (CLOCKFACE || '—'));
   document.getElementById('chip-cf').innerHTML   = '主题 <b>' + esc(themeLabel) + '</b>';
 
   var html = '';
@@ -705,6 +719,25 @@ function render(){
     '默认 <code>18</code>，要和实际接线一致。',
     '<input type="number" id="ePin" min="0" max="39" value="' + esc(epin) + '">',
     "setPref('E_pin', document.getElementById('ePin').value)");
+
+  html += '</div>';
+
+  /* ---------- 主题引擎（始终显示，决定下面显示哪一组） ---------- */
+  var engine = (S['clockfaceengine'] || 'canvas');
+  html += '<div class="group"><h2>主题引擎</h2><span>决定用哪种方式渲染画面，切换后重启生效</span></div><div class="grid">';
+
+  html += card('渲染模式',
+    '<b>画布模式</b>：运行时解析设备闪存里的 JSON 主题。可以上传、切换任意主题，' +
+    '但受 16KB 缓冲和堆内存限制（复杂主题放不下）。<br>' +
+    '<b>原生模式</b>：图片是编译进 Flash 的原始像素，运行时几乎不占内存、' +
+    '动画更流畅，但只能用固件内置的那几套。',
+    '<select id="engineSel" onchange="pickEngine(this.value)">' +
+      [['canvas','画布模式（Canvas）— 可上传自定义主题'],
+       ['native-mario','原生模式 — Mario（Flash 内置，零内存开销）']]
+      .map(function(o){ return '<option value="' + o[0] + '"' + (engine === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; })
+      .join('') +
+    '</select>',
+    null);
 
   html += '</div>';
 

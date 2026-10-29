@@ -2,8 +2,12 @@
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #include <SPIFFS.h>
 
-// Clockface
-#include <Clockface.h>
+// Clockface —— 原生主题与 Canvas 引擎同时编进来，运行时按配置选择。
+// 两者的 Clockface 类已分别改名为 MarioClockface / CanvasClockface，
+// 否则同名类会在链接期冲突（这就是上游只能"链接哪个用哪个"的原因）。
+#include <IClockface.h>
+#include "MarioClockface.h"
+#include "CanvasClockface.h"
 // Commons
 #include <WiFiController.h>
 #include <CWDateTime.h>
@@ -16,13 +20,8 @@
 #include "OfflineClock.h"
 #include "TimeStore.h"
 
-// 只有部分主题（如 Canvas 的 cw-cf-0x07）在自己的 Clockface.h 里定义了
-// CLOCKFACE_NAME，Mario 等主题没有。设置页靠这个值决定是否显示 Canvas 配置组，
-// 所以这里给一个与 firmware/lib 下联接的目录一致的兜底值。
-// 换主题时如果该主题未定义此宏，需要同步改这里。
-#ifndef CLOCKFACE_NAME
-#define CLOCKFACE_NAME "cw-cf-0x01"
-#endif
+// 注：CLOCKFACE_NAME 宏已不再使用。主题引擎改为运行时由 NVS 的
+// clockfaceEngine 决定（见下方 engineClockfaceId），编译期常量会误导。
 
 #define MIN_BRIGHT_DISPLAY_ON 4
 #define MIN_BRIGHT_DISPLAY_OFF 0
@@ -34,7 +33,7 @@
 
 MatrixPanel_I2S_DMA *dma_display = nullptr;
 
-Clockface *clockface;
+IClockface *clockface = nullptr;
 
 // 主题若自行管理亮度（例如自适应主题要按环境光切换布局+亮度），
 // 会在 setup() 里把它置 true，主循环的自动亮度就不再插手，避免两处抢写亮度寄存器。
@@ -46,6 +45,26 @@ CWDateTime cwDateTime;
 bool autoBrightEnabled;
 long autoBrightMillis = 0;
 uint8_t currentBrightSlot = -1;
+
+// ---------------- 主题引擎 ----------------
+// native-mario : 图片是编译进 flash 的 RGB565 数组，运行时零 RAM 开销（原生模式）
+// canvas       : 运行时解析 SPIFFS 里的 JSON，可上传任意主题，受 16KB/堆 限制（画布模式）
+// 引擎标识存在 NVS 的 clockfaceEngine 里，切换后重启生效。
+const char *ENGINE_NATIVE_MARIO = "native-mario";
+const char *ENGINE_CANVAS = "canvas";
+
+static const char *engineClockfaceId(const String &engine)
+{
+  if (engine == ENGINE_NATIVE_MARIO) return "cw-cf-0x01";
+  return "cw-cf-0x07";   // 其余一律走 Canvas
+}
+
+static IClockface *createClockface(const String &engine, Adafruit_GFX *display)
+{
+  if (engine == ENGINE_NATIVE_MARIO)
+    return new MarioClockface(display);
+  return new CanvasClockface(display);
+}
 
 bool isValidI2SSpeed(uint32_t speed) {
   return speed == 8000000 || speed == 16000000 || speed == 20000000;
@@ -258,10 +277,12 @@ void setup()
                   (unsigned)SPIFFS.totalBytes(), (unsigned)SPIFFS.usedBytes());
   }
 
-  // 把当前编译的主题名交给 Web 服务（cw-commons 独立编译，看不到主题宏）
-  ClockwiseWebServer::getInstance()->clockfaceName = CLOCKFACE_NAME;
-
   ClockwiseParams::getInstance()->load();
+
+  // 主题引擎由 NVS 决定，不再是编译期常量
+  const String engine = ClockwiseParams::getInstance()->clockfaceEngine;
+  ClockwiseWebServer::getInstance()->clockfaceName = engineClockfaceId(engine);
+  Serial.printf("[App] 主题引擎: %s（对应 %s）\n", engine.c_str(), engineClockfaceId(engine));
 
   // 尽早恢复时间：没有网络时系统时间是 1970，离线页面就只能显示 --:--
   time_store::restore();
@@ -273,7 +294,7 @@ void setup()
   uint8_t E_pin = ClockwiseParams::getInstance()->E_pin;
   
   displaySetup(ClockwiseParams::getInstance()->swapBlueGreen, ClockwiseParams::getInstance()->swapBlueRed, ClockwiseParams::getInstance()->displayBright, ClockwiseParams::getInstance()->displayRotation, driver, i2cSpeed, E_pin);
-  clockface = new Clockface(dma_display);
+  clockface = createClockface(engine, dma_display);
 
   autoBrightEnabled = (ClockwiseParams::getInstance()->autoBrightMax > 0);
 

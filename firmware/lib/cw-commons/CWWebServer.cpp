@@ -565,6 +565,7 @@ void ClockwiseWebServer::getCurrentSettings(WiFiClient &client)
   client.printf(HEADER_STR, p->PREF_WIFI_SSID, urlEncode(p->wifiSsid.c_str()).c_str());
   client.printf(HEADER_STR, p->PREF_NTP_SERVER, urlEncode(p->ntpServer.c_str()).c_str());
   client.printf(HEADER_STR, p->PREF_CANVAS_FILE, urlEncode(p->canvasFile.c_str()).c_str());
+  client.printf(HEADER_STR, p->PREF_CLOCKFACE_ENGINE, urlEncode(p->clockfaceEngine.c_str()).c_str());
   client.printf(HEADER_STR, p->PREF_CANVAS_SERVER, urlEncode(p->canvasServer.c_str()).c_str());
   client.printf(HEADER_STR, p->PREF_MANUAL_POSIX, urlEncode(p->manualPosix.c_str()).c_str());
 

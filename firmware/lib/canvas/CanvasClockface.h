@@ -33,7 +33,7 @@ const uint8_t CW_ICON_CANVAS[] PROGMEM = {
 	0x3f, 0xff, 0xff, 0x80, 0x3c, 0x1f, 0x07, 0x80, 0x3c, 0x1f, 0x07, 0x80, 0x18, 0x0e, 0x03, 0x00
 };
 
-class Clockface : public IClockface
+class CanvasClockface : public IClockface
 {
 private:
   Adafruit_GFX *_display;
@@ -55,7 +55,7 @@ private:
   std::vector<std::shared_ptr<CustomSprite>> sprites;
 
 public:
-  Clockface(Adafruit_GFX *display);
+  CanvasClockface(Adafruit_GFX *display);
   void setup(CWDateTime *dateTime);
   void update();
 };

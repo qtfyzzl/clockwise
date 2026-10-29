@@ -1,8 +1,9 @@
 
-#include "Clockface.h"
+#include "CanvasClockface.h"
 #include <SPIFFS.h>
 
-unsigned long lastMillis = 0;
+// static：两个主题同时编译时，同名的文件级全局会在链接期冲突
+static unsigned long lastMillis = 0;
 
 // 缓冲大小直接影响网络：本机实测
 //   doc=16KB -> 空闲堆 142KB -> 网络正常（连续跑了几小时）
@@ -11,7 +12,7 @@ unsigned long lastMillis = 0;
 // 所以先回到 16KB 保网络；大主题（mario 34KB 等）要靠压缩图片解决，不能靠加大缓冲。
 static DynamicJsonDocument doc(16384);
 
-Clockface::Clockface(Adafruit_GFX *display)
+CanvasClockface::CanvasClockface(Adafruit_GFX *display)
 {
   _display = display;
   Locator::provide(display);
@@ -21,7 +22,7 @@ Clockface::Clockface(Adafruit_GFX *display)
   pngHandle();
 }
 
-void Clockface::setup(CWDateTime *dateTime)
+void CanvasClockface::setup(CWDateTime *dateTime)
 {
   this->_dateTime = dateTime;
   drawSplashScreen(0xFFE0, "Downloading");
@@ -31,7 +32,7 @@ void Clockface::setup(CWDateTime *dateTime)
   }
 }
 
-void Clockface::drawSplashScreen(uint16_t color, const char *msg) {
+void CanvasClockface::drawSplashScreen(uint16_t color, const char *msg) {
   
   Locator::getDisplay()->fillRect(0, 0, 64, 64, 0);
   Locator::getDisplay()->drawBitmap(19, 18, CW_ICON_CANVAS, 27, 32, color);
@@ -40,7 +41,7 @@ void Clockface::drawSplashScreen(uint16_t color, const char *msg) {
   StatusController::getInstance()->printCenter(msg, 61);
 }
 
-void Clockface::update()
+void CanvasClockface::update()
 {
   // Render animation
   clockfaceLoop();
@@ -53,7 +54,7 @@ void Clockface::update()
   }
 }
 
-void Clockface::setFont(const char *fontName)
+void CanvasClockface::setFont(const char *fontName)
 {
 
   if (strcmp(fontName, "picopixel") == 0)
@@ -78,7 +79,7 @@ void Clockface::setFont(const char *fontName)
   }
 }
 
-void Clockface::renderText(String text, JsonVariantConst value)
+void CanvasClockface::renderText(String text, JsonVariantConst value)
 {
   int16_t x1, y1;
   uint16_t w, h;
@@ -100,7 +101,7 @@ void Clockface::renderText(String text, JsonVariantConst value)
   Locator::getDisplay()->print(text);
 }
 
-void Clockface::refreshDateTime()
+void CanvasClockface::refreshDateTime()
 {
 
   JsonArrayConst elements = doc["setup"].as<JsonArrayConst>();
@@ -117,7 +118,7 @@ void Clockface::refreshDateTime()
   }
 }
 
-void Clockface::clockfaceSetup()
+void CanvasClockface::clockfaceSetup()
 {
 
   // Clear screen
@@ -135,7 +136,7 @@ void Clockface::clockfaceSetup()
   createSprites();
 }
 
-void Clockface::createSprites()
+void CanvasClockface::createSprites()
 {
   JsonArrayConst elements = doc["loop"].as<JsonArrayConst>();
   uint8_t width = 0;
@@ -161,7 +162,7 @@ void Clockface::createSprites()
   }
 }
 
-void Clockface::handleSpriteAnimation(std::shared_ptr<CustomSprite>& sprite) {
+void CanvasClockface::handleSpriteAnimation(std::shared_ptr<CustomSprite>& sprite) {
     // 一次性诊断：把精灵的实际参数打出来，出问题时不用再靠猜
     static bool spriteInfoLogged = false;
     if (!spriteInfoLogged) {
@@ -217,7 +218,7 @@ void Clockface::handleSpriteAnimation(std::shared_ptr<CustomSprite>& sprite) {
     }
 }
 
-void Clockface::handleSpriteMovement(std::shared_ptr<CustomSprite>& sprite) {
+void CanvasClockface::handleSpriteMovement(std::shared_ptr<CustomSprite>& sprite) {
     unsigned long moveStartTime = doc["loop"][sprite->_spriteReference]["moveStartTime"].as<unsigned long>() ?: 1;
     unsigned long moveDuration = doc["loop"][sprite->_spriteReference]["moveDuration"].as<unsigned long>() ?: 0;
     int8_t moveInitialX = doc["loop"][sprite->_spriteReference]["x"].as<int8_t>() ?:0;
@@ -278,7 +279,7 @@ void Clockface::handleSpriteMovement(std::shared_ptr<CustomSprite>& sprite) {
     }
 }
 
-void Clockface::clockfaceLoop() {
+void CanvasClockface::clockfaceLoop() {
     if (sprites.empty()) {
         return;
     }
@@ -288,7 +289,7 @@ void Clockface::clockfaceLoop() {
     }
 }
 
-void Clockface::renderElements(JsonArrayConst elements)
+void CanvasClockface::renderElements(JsonArrayConst elements)
 {
   for (JsonVariantConst value : elements)
   {
@@ -334,7 +335,7 @@ void Clockface::renderElements(JsonArrayConst elements)
   }
 }
 
-bool Clockface::deserializeDefinition()
+bool CanvasClockface::deserializeDefinition()
 {
   ClockwiseParams *params = ClockwiseParams::getInstance();
 

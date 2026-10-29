@@ -512,17 +512,33 @@ function formatStorage(){
   });
 }
 
-// 渲染引擎列表（数据来自 /engines，每行 "id|显示名"）
+// 读取 /engines（200 + 文本正文）。
+// 注意不能用 requestGet：那个函数只在 readyState===2 && status===204 时回调，
+// 是给 /get、/read 这类"204 + 响应头"接口用的，拿它取正文会永远等不到回调。
+function loadEngines(cb){
+  qrun(function(done){
+    var xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = function(){
+      if (this.readyState !== 4) return;
+      cb(this.status === 200 ? (this.responseText || '') : '');
+      done();
+    };
+    xhr.open('GET', '/engines', true);
+    xhr.send();
+  });
+}
+
+// 渲染引擎列表（每行 "id|显示名"）
 function renderEngineList(){
   var box = document.getElementById('engineList');
   if (!box) return;
-  requestGet('/engines', function(req){
-    var txt = (req && req.responseText) || '';
+  loadEngines(function(txt){
     var cur = (S['clockfaceengine'] || 'canvas');
     var lines = txt.split(/\r?\n/).map(function(s){ return s.trim(); })
                    .filter(function(s){ return s.length; });
     if (!lines.length) {
-      box.innerHTML = '<span class="hint">固件没有报告任何引擎</span>';
+      box.innerHTML = '<span class="hint">读取失败，点这里重试</span>';
+      box.onclick = renderEngineList;
       return;
     }
     box.innerHTML = lines.map(function(line){

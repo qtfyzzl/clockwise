@@ -1,5 +1,7 @@
 #include "CWWebServer.h"
 
+#include <Update.h>   // OTA：把上传的固件写进空闲的 app 分区
+
 #include <Arduino.h>
 #include "StatusController.h"
 #include "SettingsWebPage.h"
@@ -263,6 +265,8 @@ void ClockwiseWebServer::processRequest(WiFiClient &client, const String &method
     }
     if (path == "/theme")
       return handleThemeUpload(client, value);
+    if (path == "/update")
+      return handleFirmwareUpdate(client);      // OTA：上传 .bin 固件
     if (path == "/theme-delete")
       return handleThemeDelete(client, value);
     if (path == "/restart")
@@ -435,21 +439,105 @@ void ClockwiseWebServer::sendThemeFile(WiFiClient &client, const String &name)
   // 注意：这里不能再 println()，否则响应体会比 Content-Length 多出 2 字节
 }
 
-void ClockwiseWebServer::handleThemeUpload(WiFiClient &client, const String &name)
+// 上传类端点共用：外层只读到请求行就 break 了，剩余头部在这里消费掉。
+// 顺便把 Content-Length 取出来，后面才知道要收多少字节。
+long ClockwiseWebServer::readContentLength(WiFiClient &client)
 {
-  // 外层只读到第一行就 break 了，这里要把剩余请求头和 body 读完
+  long len = -1;
   client.setTimeout(1000);
-
-  long contentLength = -1;
   while (client.connected())
   {
     String line = client.readStringUntil('\n');
     line.trim();
     if (line.length() == 0)
-      break;                              // 空行 = 头部结束
+      break;                       // 空行 = 头部结束
     if (line.startsWith("Content-Length:") || line.startsWith("content-length:"))
-      contentLength = line.substring(15).toInt();
+      len = line.substring(15).toInt();
   }
+  return len;
+}
+
+// OTA：把 POST 上来的 .bin 直接写进另一个 app 分区。
+// 用的是流式写入，内存只占一个 2KB 缓冲，不会因为固件 1.6MB 而爆堆。
+// 写完 Update.end(true) 会切换启动分区，然后重启。
+void ClockwiseWebServer::handleFirmwareUpdate(WiFiClient &client)
+{
+  const long contentLength = readContentLength(client);
+  if (contentLength <= 0)
+  {
+    Serial.println("[OTA] 缺少 Content-Length");
+    return sendStatus(client, "HTTP/1.0 400 Bad Request");
+  }
+  if (contentLength > 2 * 1024 * 1024)
+  {
+    Serial.printf("[OTA] 固件过大: %ld 字节\n", contentLength);
+    return sendStatus(client, "HTTP/1.0 413 Payload Too Large");
+  }
+
+  Serial.printf("[OTA] 开始接收固件 %ld 字节\n", contentLength);
+
+  if (!Update.begin(contentLength))
+  {
+    Serial.printf("[OTA] Update.begin 失败: %s\n", Update.errorString());
+    return sendStatus(client, "HTTP/1.0 500 Internal Server Error");
+  }
+
+  static uint8_t buf[2048];
+  long remaining = contentLength;
+  const unsigned long idleTimeoutMs = 30000;   // 30 秒收不到数据就放弃
+  unsigned long lastData = millis();
+  unsigned long lastReport = 0;
+
+  while (remaining > 0 && (millis() - lastData) < idleTimeoutMs)
+  {
+    const size_t want = remaining < (long)sizeof(buf) ? (size_t)remaining : sizeof(buf);
+    const int n = client.read(buf, want);
+    if (n <= 0)
+    {
+      delay(1);
+      continue;
+    }
+    if (Update.write(buf, n) != (size_t)n)
+    {
+      Serial.printf("[OTA] 写入失败: %s\n", Update.errorString());
+      Update.abort();
+      return sendStatus(client, "HTTP/1.0 500 Internal Server Error");
+    }
+    remaining -= n;
+    lastData = millis();
+
+    if (millis() - lastReport > 3000)   // 进度别刷太快
+    {
+      lastReport = millis();
+      Serial.printf("[OTA] 已写入 %ld/%ld\n", contentLength - remaining, contentLength);
+    }
+  }
+
+  if (remaining > 0)
+  {
+    Serial.printf("[OTA] 接收中断，还差 %ld 字节\n", remaining);
+    Update.abort();
+    return sendStatus(client, "HTTP/1.0 500 Internal Server Error");
+  }
+
+  if (!Update.end(true))
+  {
+    Serial.printf("[OTA] 校验失败: %s\n", Update.errorString());
+    return sendStatus(client, "HTTP/1.0 500 Internal Server Error");
+  }
+
+  Serial.println("[OTA] 固件写入完成，准备重启");
+  client.println("HTTP/1.0 200 OK");
+  client.println("Content-Type: text/plain; charset=utf-8");
+  client.println();
+  client.println("OK");
+  delay(500);          // 把响应发完再重启
+  ESP.restart();
+}
+
+void ClockwiseWebServer::handleThemeUpload(WiFiClient &client, const String &name)
+{
+  const long contentLength = readContentLength(client);
 
   if (!isValidThemeName(name) || contentLength <= 0 || contentLength > MAX_UPLOAD_BYTES)
   {

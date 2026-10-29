@@ -525,6 +525,46 @@ function pickEngine(v){
   }, 700);
 }
 
+// 上传固件并升级。
+// 特意不走 qrun 队列：队列给单个请求设了 15 秒超时，而 1.6MB 固件要传几十秒，
+// 走队列会被提前判定超时并放行下一个请求，两个请求撞在单连接服务上。
+function uploadFirmware(){
+  var input = document.getElementById('fwFile');
+  var prog  = document.getElementById('fwProg');
+  var file  = input && input.files && input.files[0];
+
+  if (!file) { toast('先选一个 .bin 固件文件'); return; }
+  if (file.size < 100000) { toast('文件太小，不像固件'); return; }
+
+  var kb = Math.round(file.size / 1024);
+  if (!confirm('上传并升级固件？\n\n' + file.name + '（' + kb + ' KB）\n' +
+               '约需 1 分钟，期间不要断电。')) return;
+
+  if (prog) prog.textContent = '准备上传…';
+  var xhr = new XMLHttpRequest();
+
+  xhr.upload.onprogress = function(e){
+    if (e.lengthComputable && prog) {
+      var pct = Math.round(e.loaded * 100 / e.total);
+      prog.textContent = '上传中 ' + pct + '%（' + Math.round(e.loaded/1024) + ' / ' + kb + ' KB）';
+    }
+  };
+
+  xhr.onreadystatechange = function(){
+    if (this.readyState !== 4) return;
+    if (this.status === 200) {
+      if (prog) prog.textContent = '升级成功，设备重启中…等 20 秒后刷新页面';
+      toast('升级成功，等待重启');
+    } else {
+      if (prog) prog.textContent = '升级失败：HTTP ' + this.status + '（设备未重启，可重试）';
+      toast('升级失败');
+    }
+  };
+
+  xhr.open('POST', '/update', true);
+  xhr.send(file);
+}
+
 function refreshThemes(){
   var sel = document.getElementById('themeList');
   if (!sel) return;
@@ -815,6 +855,20 @@ function render(){
 
     html += '</div>';
   }
+
+  /* ---------- 固件升级（始终显示） ---------- */
+  html += '<div class="group"><h2>固件升级</h2><span>不用再按 BOOT 键，网页直接刷</span></div><div class="grid">';
+
+  html += card('OTA 空中升级',
+    '当前固件 <b>' + esc(S['cw_fw_version'] || '?') + '</b>。选择 <code>.bin</code> 文件上传，' +
+    '设备会写进备用分区再切换启动，<b>升级失败会自动回退</b>，不会变砖。<br>' +
+    '传完会自动重启，期间<b>不要断电</b>。1.6MB 约需 1 分钟（取决于 WiFi 速度）。',
+    '<input type="file" id="fwFile" accept=".bin">' +
+    '<button class="ghost" style="margin-top:8px" onclick="uploadFirmware()">上传并升级</button>' +
+    '<div class="hint" id="fwProg" style="margin-top:6px"></div>',
+    null);
+
+  html += '</div>';
 
   document.getElementById('app').innerHTML = html;
   // Canvas 组渲染完再异步拉主题列表（只有 cw-cf-0x07 才有这个元素）

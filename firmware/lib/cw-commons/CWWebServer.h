@@ -75,6 +75,7 @@ private:
   void sendThemeFile(WiFiClient &client, const String &name);
   void handleThemeUpload(WiFiClient &client, const String &name);
   void handleThemeDelete(WiFiClient &client, const String &name);
+  void handleFirmwareUpdate(WiFiClient &client);
   void readPin(WiFiClient &client, const String &key, uint16_t pin);
 
   // ---- 工具 ----
@@ -88,5 +89,7 @@ private:
 
   // ---- 主题文件 ----
   static bool isValidThemeName(const String &name);
+  // 从请求头里取 Content-Length（上传类端点共用）
+  static long readContentLength(WiFiClient &client);
   static String themePath(const String &name);
 };

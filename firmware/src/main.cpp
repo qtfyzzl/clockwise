@@ -15,6 +15,7 @@
 #include <CWWebServer.h>
 #include <StatusController.h>
 #include <picopixel.h>
+#include <ArduinoOTA.h>   // 命令行空中升级（pio run -t upload --upload-port <ip>）
 
 // 本工程内聚模块
 #include "OfflineClock.h"
@@ -382,6 +383,35 @@ static void ensureCanvasFileExists()
   p->save();
 }
 
+// ---------------- 空中升级（OTA）----------------
+// 分区表已改成 app0/app1 双分区（partitions_ota.csv），新固件写进空闲那份，
+// 校验通过才切换启动分区，写坏了还能回退。
+//
+// 两条通道：
+//   1. ArduinoOTA：命令行一条命令推送，适合我们自己调试
+//        pio run -t upload --upload-port 192.168.x.x
+//      需要在 platformio.ini 里设 upload_protocol = espota
+//   2. HTTP POST /update：浏览器选 .bin 上传，不依赖电脑装工具
+static void setupOTA()
+{
+  ArduinoOTA.setHostname("clockwise");
+  // 不设密码：这是内网挂钟，设了反而容易忘。要设就取消下面注释。
+  // ArduinoOTA.setPassword("clockwise");
+
+  ArduinoOTA.onStart([]() { Serial.println("[OTA] 开始接收固件"); });
+  ArduinoOTA.onProgress([](unsigned int done, unsigned int total) {
+    if (total) Serial.printf("[OTA] %u%%\r", done * 100 / total);
+  });
+  ArduinoOTA.onEnd([]() { Serial.println("\n[OTA] 完成，重启中"); });
+  ArduinoOTA.onError([](ota_error_t e) {
+    Serial.printf("\n[OTA] 失败 code=%u\n", (unsigned)e);
+  });
+
+  ArduinoOTA.begin();
+  Serial.printf("[OTA] 就绪，主机名 clockwise.local，IP %s\n",
+                WiFi.localIP().toString().c_str());
+}
+
 void onNetworkReady()
 {
   StatusController::getInstance()->ntpConnecting();
@@ -406,6 +436,8 @@ void onNetworkReady()
   clockface->setup(&cwDateTime);
 
   // 链路质量诊断：RSSI 太差（>-75dBm 说明信号很弱）时，网页再怎么优化都慢
+  setupOTA();
+
   Serial.printf("[WiFi] RSSI=%d dBm  信道=%d  省电模式=%d\n",
                 WiFi.RSSI(), WiFi.channel(), (int)WiFi.getSleep());
 
@@ -423,6 +455,7 @@ void loop()
   if (wifi.isConnected())
   {
     ClockwiseWebServer::getInstance()->handleHttpRequest();
+    ArduinoOTA.handle();   // 处理 OTA 会话（内部非阻塞）
     ezt::events();
   }
 

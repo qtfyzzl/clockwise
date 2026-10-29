@@ -104,7 +104,17 @@ clockwise/
 
 ### 主题是怎么"选中"的
 
-`firmware/lib/` 下只能存在**一个**提供 `Clockface` 类的目录（否则符号冲突）。切换方式是 junction：
+> **2026-10-29 更新：这个"只能有一个"的限制已经解除了。**
+> 现在原生主题和 Canvas 引擎同时编进固件，运行时按 NVS 的 `clockfaceEngine` 选择：
+> `"canvas"`（默认，解析 JSON）/ `"native-mario"`（图片在 Flash，零内存）。
+> 做法是给每个主题的类改名（`MarioClockface` / `CanvasClockface`）并把
+> 两个 .cpp 里同名的全局 `lastMillis` 改成 `static`，冲突就没了。
+> 加一个原生主题的实测成本：Flash +11.7 KB、RAM +272 B（余量 1.4 MB，还能加 5 个）。
+> 设置页顶部有「主题引擎」下拉，切换后重启生效。
+>
+> 下面这段 junction 的做法**只在新增原生主题时**还需要用到。
+
+历史做法：`firmware/lib/` 下只能存在**一个**提供 `Clockface` 类的目录（否则符号冲突）。切换方式是 junction：
 
 ```bash
 cd firmware/lib

@@ -633,15 +633,11 @@ function uploadTheme(input){
 function render(){
   var bright   = S['displaybright'] || '32';
   var use24    = S['use24hformat'] === '1';
-  var swapBG   = S['swapbluegreen'] === '1';
-  var swapBR   = S['swapbluered'] === '1';
   var ldrPin   = S['ldrpin'] || '35';
   var abMin    = S['autobrightmin'] || '0';
   var abMax    = S['autobrightmax'] || '0';
   var rot      = S['displayrotation'] || '0';
-  var drv      = S['driver'] || '0';
   var spd      = S['i2cspeed'] || '8000000';
-  var epin     = S['e_pin'] || '18';
   CLOCKFACE    = S['clockface_name'] || '';
 
   // 顶栏信息
@@ -657,7 +653,7 @@ function render(){
   var html = '';
 
   /* ---------- 显示 ---------- */
-  html += '<div class="group"><h2>显示</h2><span>亮度、自动亮度、屏幕方向</span></div><div class="grid">';
+  html += '<div class="group"><h2>显示</h2><span>亮度、自动亮度、屏幕方向、刷新率</span></div><div class="grid">';
 
   html += card('屏幕亮度',
     '范围 0–255。<code>0</code> 等于关屏，<code>255</code> 最亮。亮度越高耗电越大，电源不足时会出现闪烁。',
@@ -695,6 +691,16 @@ function render(){
     '</select>',
     "setPref('displayRotation', document.getElementById('rotation').value)");
 
+  html += card('I2S 时钟速度（刷新率）',
+    '面板的扫描速率。<code>8 MHz</code> 最稳；<code>16/20 MHz</code> 画面更流畅，' +
+    '但对线材和面板要求高，出现闪屏就退回 8 MHz。',
+    '<select id="speed">' +
+      [['8000000','8 MHz（默认）'],['16000000','16 MHz'],['20000000','20 MHz']]
+      .map(function(o){ return '<option value="' + o[0] + '"' + (spd === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; })
+      .join('') +
+    '</select>',
+    "setPref('i2cSpeed', document.getElementById('speed').value)");
+
   html += '</div>';
 
   /* ---------- 时间 ---------- */
@@ -722,43 +728,6 @@ function render(){
     '<a href="https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv" target="_blank">对照表</a>',
     '<input type="text" id="posix" value="' + esc(S['manualposix'] || '') + '" placeholder="留空 = 自动">',
     "setPref('manualPosix', document.getElementById('posix').value)");
-
-  html += '</div>';
-
-  /* ---------- 硬件（高级） ---------- */
-  html += '<div class="group"><h2>硬件（高级）</h2><span>颜色不对 / 花屏 / 只亮一半时才需要动</span></div><div class="grid">';
-
-  html += card('红绿蓝线序纠正',
-    '面板颜色不对时用。<b>两个开关只能开一个</b>，同时开会导致线序彻底错乱。' +
-    '红蓝颠倒开第一个，绿蓝颠倒开第二个。',
-    sw('swapBG', swapBG, '交换蓝 / 绿（面板为 RBG）') + '<br>' + sw('swapBR', swapBR, '交换蓝 / 红（面板为 GRB）'),
-    "setPref('swapBlueGreen', document.getElementById('swapBG').checked ? 1 : 0);" +
-    "setPref('swapBlueRed', document.getElementById('swapBR').checked ? 1 : 0)");
-
-  html += card('驱动芯片（Shift Driver）',
-    '花屏、闪屏、颜色异常多半是这里不对。不确定就先试 <code>SHIFTREG</code>，' +
-    '不行再依次试 FM6124 / ICN2038S。',
-    '<select id="driver">' +
-      [['0','SHIFTREG（默认）'],['1','FM6124'],['2','FM6126A'],['3','ICN2038S'],['4','MBI5124'],['5','DP3246']]
-      .map(function(o){ return '<option value="' + o[0] + '"' + (drv === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; })
-      .join('') +
-    '</select>',
-    "setPref('driver', document.getElementById('driver').value)");
-
-  html += card('I2S 时钟速度',
-    '刷新速率。<code>8M</code> 最稳，<code>20M</code> 更流畅但对线材和面板要求高，可能闪屏。',
-    '<select id="speed">' +
-      [['8000000','8 MHz（默认）'],['16000000','16 MHz'],['20000000','20 MHz']]
-      .map(function(o){ return '<option value="' + o[0] + '"' + (spd === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; })
-      .join('') +
-    '</select>',
-    "setPref('i2cSpeed', document.getElementById('speed').value)");
-
-  html += card('E 引脚（E Address Line）',
-    '64×64 面板是 1:32 扫描，<b>必须接 E 线</b>，否则只亮一半或隔行显示。' +
-    '默认 <code>18</code>，要和实际接线一致。',
-    '<input type="number" id="ePin" min="0" max="39" value="' + esc(epin) + '">',
-    "setPref('E_pin', document.getElementById('ePin').value)");
 
   html += '</div>';
 

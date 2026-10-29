@@ -592,10 +592,42 @@ def image_size_from_b64(b64):
         return None
 
 
+# ---------------------------------------------------------------- 8-bit RGB PNG
+
+def encode_rgb_png(rgb_bytes, width, height, level=9):
+    """编码成 8-bit RGB PNG（颜色类型 2）。
+
+    为什么不用索引色：设备端 PNGdec 1.0.1 解码「1-bit / 2-bit 索引色 PNG」时会
+    跳到空指针，表现为设备无限重启（Guru Meditation / BREAK instr）。
+    而 8-bit 索引色在 64x22 这种尺寸下解码后就有 1408 字节，超过设备 1024 字节的
+    图片缓冲。所以统一走 RGB：zlib 对纯色块压缩率极高，体积同样很小。
+
+    rgb_bytes: 长度必须是 width*height*3 的字节序列（RGB 顺序，每像素 3 字节）
+    """
+    rows = []
+    stride = width * 3
+    for y in range(height):
+        base = y * stride
+        rows.append(b"\x00" + bytes(rgb_bytes[base:base + stride]))   # 过滤类型 0
+    raw = b"".join(rows)
+
+    def chunk(tag, data):
+        return (struct.pack(">I", len(data)) + tag + data
+                + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF))
+
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+            + chunk(b"IDAT", zlib.compress(raw, level)) + chunk(b"IEND", b""))
+
+
 # ---------------------------------------------------------------- 索引色 PNG
 
 def encode_indexed_png(indices, palette, width, height, level=9):
-    """把调色板索引写成最小 PNG（PLTE + 位深 1/2/4/8，无 gAMA 等附加块）。"""
+    """把调色板索引写成最小 PNG（PLTE + 位深 1/2/4/8，无 gAMA 等附加块）。
+
+    ⚠️ 设备不能用！位深 1/2 的索引色 PNG 会让 PNGdec 崩溃（见 encode_rgb_png 的说明）。
+    仅为兼容旧脚本/测试保留；导出主题请走 prepare_image()，它现在产出 RGB PNG。
+    """
     n = max(1, len(palette))
     if n <= 2:
         bd = 1
@@ -723,9 +755,11 @@ def prepare_image(src, max_w=32, max_h=32, colors=8, dither=False, bg=(0, 0, 0),
             pal.append((pal_raw[base], pal_raw[base + 1], pal_raw[base + 2]))
         else:
             pal.append((0, 0, 0))
-    # 调色板按 2 的幂补齐，让位深选择稳定
     width, height = img.size
-    png = encode_indexed_png(idx, pal, width, height, level=level)
+    # 量化到少量颜色（压体积），但仍以 8-bit RGB 输出（设备只认这个）。
+    # 纯色块经 zlib 压缩后通常每帧只有一两百字节，比低位深索引色大不了多少。
+    rgb_bytes = q.convert("RGB").tobytes()
+    png = encode_rgb_png(rgb_bytes, width, height, level=level)
     return ImageResult(png, idx, pal, width, height, len(pal))
 
 

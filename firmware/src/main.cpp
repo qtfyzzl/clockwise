@@ -11,9 +11,10 @@
 #include <CWWebServer.h>
 #include <StatusController.h>
 #include <picopixel.h>
-#include <time.h>
-#include <sys/time.h>
-#include <stdlib.h>
+
+// 本工程内聚模块
+#include "OfflineClock.h"
+#include "TimeStore.h"
 
 // 只有部分主题（如 Canvas 的 cw-cf-0x07）在自己的 Clockface.h 里定义了
 // CLOCKFACE_NAME，Mario 等主题没有。设置页靠这个值决定是否显示 Canvas 配置组，
@@ -161,80 +162,20 @@ void automaticBrightControl()
   }
 }
 
-// ---------------- 离线兜底显示 ----------------
-// WiFi 一直连不上时，clockface->setup() 永远不会被调用，屏幕会一直停在
-// "正在连接 WiFi" 的静态提示上。这里在主循环里兜一层：超时后自己画一个
-// 可辨识的界面（时间若已同步就显示时间，否则显示占位与提示）。
+// ---------------- 离线兜底 ----------------
+// WiFi 一直连不上时 clockface->setup() 永远不会被调用，屏幕会停在静态提示上。
+// 这里在主循环里兜一层：超时后自己画一个可辨识的界面。
+// 具体绘制在 OfflineClock.cpp，时间恢复在 TimeStore.cpp。
 #define OFFLINE_AFTER_MS 20000UL
 
 static bool offlineActive = false;
 static unsigned long offlineLastDraw = 0;
 
-static const uint8_t OFFLINE_SEGS[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F};
-
-static void offlineDigit(int x, int y, int w, int h, int t, int8_t d)
-{
-  const int half = (h - t) / 2;
-  const int vert = (h - t) / 2 - t;
-  const uint8_t m = (d < 0) ? 0x40 : OFFLINE_SEGS[d % 10]; // d<0 表示显示一条横杠
-
-  if (m & 0x01) dma_display->fillRect(x + t, y, w - 2 * t, t, 0xFFFF);
-  if (m & 0x40) dma_display->fillRect(x + t, y + half, w - 2 * t, t, 0xFFFF);
-  if (m & 0x08) dma_display->fillRect(x + t, y + h - t, w - 2 * t, t, 0xFFFF);
-  if (m & 0x20) dma_display->fillRect(x, y + t, t, vert, 0xFFFF);
-  if (m & 0x02) dma_display->fillRect(x + w - t, y + t, t, vert, 0xFFFF);
-  if (m & 0x10) dma_display->fillRect(x, y + (h + t) / 2, t, vert, 0xFFFF);
-  if (m & 0x04) dma_display->fillRect(x + w - t, y + (h + t) / 2, t, vert, 0xFFFF);
-}
-
-// ---------------- 时间持久化 ----------------
-// ESP32 没有电池 RTC，断电后系统时间是 1970。把最后一次 NTP 时间存进 NVS，
-// 没网启动时用它恢复，离线页面就能显示一个「大致正确」的时间。
-// 误差 = 关机时长，所以每 30 分钟刷新存档。
-static unsigned long lastTimeSave = 0;
-
-static void applyTimeZoneEnv()
-{
-  const String posix = ClockwiseParams::getInstance()->manualPosix;
-  if (posix.length() > 0)
-  {
-    setenv("TZ", posix.c_str(), 1);
-    tzset();
-  }
-}
-
-static void restoreTimeFromNvs()
-{
-  applyTimeZoneEnv();
-
-  const uint32_t saved = ClockwiseParams::getInstance()->lastEpoch;
-  if (saved < 1700000000UL)
-    return;                       // 从来没同步成功过
-  if (time(nullptr) > 1700000000L)
-    return;                       // 系统时间已经是对的
-
-  struct timeval tv;
-  tv.tv_sec = (time_t)saved;
-  tv.tv_usec = 0;
-  settimeofday(&tv, nullptr);
-  Serial.printf("[Time] 无网络，用存档时间恢复: %lu\n", (unsigned long)saved);
-}
-
-static void saveTimeToNvs()
-{
-  const time_t now = time(nullptr);
-  if (now < 1700000000L)
-    return;
-  if (lastTimeSave != 0 && millis() - lastTimeSave < 30UL * 60UL * 1000UL)
-    return;
-  lastTimeSave = millis();
-  ClockwiseParams::getInstance()->lastEpoch = (uint32_t)now;
-  ClockwiseParams::getInstance()->save();
-}
-
 // ---------------- 离线重连 ----------------
 // 连不上就每分钟重试一次。注意必须保留配网 AP（手机还要连它），
 // 所以切成 AP+STA 共存，而不是把 AP 关掉。
+static const unsigned long WIFI_RETRY_INTERVAL_MS = 60000UL;
+
 static unsigned long lastWifiRetry = 0;
 static uint16_t wifiRetryCount = 0;
 
@@ -247,7 +188,7 @@ static void retryWiFiIfOffline()
   if (ssid.length() == 0)
     return;
 
-  if (lastWifiRetry != 0 && millis() - lastWifiRetry < 60000UL)
+  if (lastWifiRetry != 0 && millis() - lastWifiRetry < WIFI_RETRY_INTERVAL_MS)
     return;
   lastWifiRetry = millis();
 
@@ -258,50 +199,6 @@ static void retryWiFiIfOffline()
   wifiRetryCount++;
   Serial.printf("[WiFi] 第 %u 次重连（每 60 秒一次）: %s\n", wifiRetryCount, ssid.c_str());
   WiFi.begin(ssid.c_str(), ClockwiseParams::getInstance()->wifiPwd.c_str());
-}
-
-void drawOfflineScreen()
-{
-  dma_display->fillRect(0, 0, 64, 64, 0);
-
-  // 时间是否可信：NTP 同步过才会有 2023 年以后的时间
-  const bool timeValid = (time(nullptr) > 1700000000L);
-
-  int8_t h1, h2, m1, m2;
-  if (timeValid)
-  {
-    // 用 localtime_r 而不是 cwDateTime：离线时 cwDateTime.begin() 可能还没跑过
-    time_t now = time(nullptr);
-    struct tm lt;
-    localtime_r(&now, &lt);
-    h1 = lt.tm_hour / 10; h2 = lt.tm_hour % 10;
-    m1 = lt.tm_min / 10;  m2 = lt.tm_min % 10;
-  }
-  else
-  {
-    h1 = h2 = m1 = m2 = -1; // 显示 --:--
-  }
-
-  // 与 adaptive 主题一致的几何：4*12 + 4*2 + 4 = 60，居中 x=2
-  const int w = 12, h = 32, t = 3, gap = 2, colon = 4, y = 14;
-  offlineDigit(2, y, w, h, t, h1);
-  offlineDigit(2 + w + gap, y, w, h, t, h2);
-  const int cx = 2 + 2 * (w + gap);
-  dma_display->fillRect(cx + 1, y + h / 3, 2, 2, 0xFFFF);
-  dma_display->fillRect(cx + 1, y + 2 * h / 3 - 2, 2, 2, 0xFFFF);
-  offlineDigit(cx + colon + gap, y, w, h, t, m1);
-  offlineDigit(cx + colon + gap + w + gap, y, w, h, t, m2);
-
-  // 底部小字提示
-  dma_display->setFont(&Picopixel);
-  dma_display->setTextColor(0xF800); // 红
-  const char *msg = timeValid ? "no wifi" : "no wifi / no time";
-  int16_t x1, y1;
-  uint16_t tw, th;
-  dma_display->getTextBounds(msg, 0, 0, &x1, &y1, &tw, &th);
-  dma_display->setCursor((64 - tw) / 2 - x1, 52);
-  dma_display->print(msg);
-  dma_display->setFont();
 }
 
 // ---------------- 自动换盘 ----------------
@@ -344,10 +241,16 @@ void setup()
 
   StatusController::getInstance()->blink_led(5, 100);
 
-  // 挂载 SPIFFS：给 Canvas 主题存本地 JSON 用（分区表 huge_app.csv 里预留 896KB）
-  if (!SPIFFS.begin(true))
+  // 挂载 SPIFFS：给 Canvas 主题存本地 JSON 用（分区表 huge_app.csv 里预留 896KB）。
+  //
+  // 第二个参数原来是 true（挂载失败就格式化）。踩过坑：换 USB 口时电源闪断，
+  // 正好卡在写主题，分区损坏 → 下次启动自动格式化 → 用户 25 个主题全没了，
+  // 而且没有任何提示。
+  // 现在改成 false：失败了只报错，由用户在设置页显式点「格式化存储」才清空。
+  if (!SPIFFS.begin(false))
   {
-    Serial.println("[FS] SPIFFS 挂载失败，Canvas 只能用远程主题");
+    Serial.println("[FS] SPIFFS 挂载失败（未自动格式化，避免清空已有主题）");
+    Serial.println("[FS] 如需重建，请在设置页点「格式化存储」，或调 POST /fs-format");
   }
   else
   {
@@ -361,7 +264,7 @@ void setup()
   ClockwiseParams::getInstance()->load();
 
   // 尽早恢复时间：没有网络时系统时间是 1970，离线页面就只能显示 --:--
-  restoreTimeFromNvs();
+  time_store::restore();
 
   pinMode(ClockwiseParams::getInstance()->ldrPin, INPUT);
 
@@ -436,6 +339,28 @@ void showIpSplash()
   dma_display->setFont();
 }
 
+// 校验 canvasFile 对应的本地文件是否存在；不存在就换成随便一个存在的主题。
+// 只改 NVS，不重启——setup() 紧接着就会读这个值。
+static void ensureCanvasFileExists()
+{
+  ClockwiseParams *p = ClockwiseParams::getInstance();
+  const String path = "/" + p->canvasFile + ".json";
+
+  if (p->canvasFile.length() > 0 && SPIFFS.exists(path))
+    return;
+
+  const String fallback = ClockwiseWebServer::firstLocalTheme();
+  Serial.printf("[Canvas] 主题 '%s' 的本地文件不存在，回退到 '%s'\n",
+                p->canvasFile.c_str(),
+                fallback.length() ? fallback.c_str() : "(无)");
+
+  if (fallback.length() == 0)
+    return;   // 一个本地主题都没有，交给 Canvas 去远程拉
+
+  p->canvasFile = fallback;
+  p->save();
+}
+
 void onNetworkReady()
 {
   StatusController::getInstance()->ntpConnecting();
@@ -451,6 +376,11 @@ void onNetworkReady()
   // 而不是 free。48KB JSON 缓冲那次就是 free 还有 108KB、但 maxAlloc 不够了。
   Serial.printf("[HEAP] 主题接管前 free=%u maxAlloc=%u\n",
                 (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+
+  // 启动前确认 canvasFile 指向的文件真的存在。
+  // 换 USB 口/断电损坏分区后，NVS 里可能还留着一个已被清掉的主题名，
+  // 那样 Canvas 会去远程拉、超时后停在报错页。这里直接回退到任意一个本地主题。
+  ensureCanvasFileExists();
 
   clockface->setup(&cwDateTime);
 
@@ -493,10 +423,10 @@ void loop()
     if (offlineActive && (millis() - offlineLastDraw > 1000))
     {
       offlineLastDraw = millis();
-      drawOfflineScreen();
+      offline_clock::draw(dma_display);
     }
   }
 
   automaticBrightControl();
-  saveTimeToNvs();
+  time_store::saveIfDue();
 }

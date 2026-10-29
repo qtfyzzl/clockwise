@@ -120,23 +120,18 @@ def build_strip():
 
 
 def frame_png(rows, cols, width, height):
-    """从画布切出 width 列 × height 行，生成索引色 PNG（按本帧实际用色裁剪调色板）。"""
-    used = [0]
-    for y in range(height):
-        for x in range(cols, cols + width):
-            v = rows[y][x]
-            if v and v not in used:
-                used.append(v)
-    cmap = {0: (0, 0, 0), 1: BODY_COLOR, 2: HEAD_COLOR}
-    palette = [cmap[u] for u in used]
-    remap = {u: i for i, u in enumerate(used)}
+    """从画布切出 width 列 × height 行，生成 8-bit RGB PNG。
 
-    indices = []
+    不能再用索引色：位深 1/2 的索引色 PNG 会让设备端 PNGdec 跳到空指针，
+    表现为设备无限重启（Guru Meditation / BREAK instr）。
+    RGB + zlib 对这种大块纯色压得同样小（每帧约 200~300 字节）。
+    """
+    cmap = {0: (0, 0, 0), 1: BODY_COLOR, 2: HEAD_COLOR}
+    out = bytearray()
     for y in range(height):
         for x in range(width):
-            v = rows[y][cols + x]
-            indices.append(remap.get(v, 0))
-    return cw.encode_indexed_png(indices, palette, width, height)
+            out += bytes(cmap.get(rows[y][cols + x], (0, 0, 0)))
+    return cw.encode_rgb_png(bytes(out), width, height)
 
 
 def build_theme(step):

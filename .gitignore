@@ -27,3 +27,6 @@ editor.zip
 # Python 缓存
 __pycache__/
 *.pyc
+
+# 临时安装的 Python 依赖（验证工具用，不属于仓库）
+dist/_pylibs/

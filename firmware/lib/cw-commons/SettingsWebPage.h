@@ -483,6 +483,35 @@ function pickTheme(name){
   toast('已选择「' + name + '」，重启后生效');
 }
 
+// 存储（SPIFFS）状态：挂载失败时主题存不进去，要把原因讲清楚，
+// 而不是让用户对着"上传失败"发呆。挂载失败不会自动格式化，
+// 必须用户显式点「格式化存储」。
+function fsStateText(){
+  if (S['fsready'] !== '1') {
+    return '<span style="color:#c0392b">存储未就绪</span>：分区挂载失败，主题无法保存。' +
+           '点「格式化存储」可重建（会清空已有主题）。';
+  }
+  var used = parseInt(S['fsused'] || '0', 10);
+  var total = parseInt(S['fstotal'] || '0', 10);
+  if (!total) return '';
+  var kb = function(n){ return (n / 1024).toFixed(0) + ' KB'; };
+  return '存储正常：已用 ' + kb(used) + ' / ' + kb(total) +
+         '（' + Math.round(used * 100 / total) + '%）';
+}
+
+function formatStorage(){
+  if (!confirm('格式化会删除设备上所有主题，确定继续？')) return;
+  if (!confirm('再确认一次：主题将全部丢失，需要重新上传。')) return;
+  qrun(function(done){
+    var xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = function(){
+      if (this.readyState === 4) { done(); toast('格式化中，设备即将重启'); }
+    };
+    xhr.open('POST', '/fs-format', true);
+    xhr.send();
+  });
+}
+
 function refreshThemes(){
   var sel = document.getElementById('themeList');
   if (!sel) return;
@@ -695,10 +724,12 @@ function render(){
       '<input type="text" id="canvasFile" value="' + esc(S['canvasfile'] || '') + '" placeholder="my-theme">' +
       '<select id="themeList" onchange="pickTheme(this.value)" style="margin-top:8px">' +
       '<option value="">读取中…</option></select>' +
-      '<div style="display:flex;gap:8px;margin-top:8px">' +
+      '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">' +
         '<button class="ghost" onclick="refreshThemes()">刷新列表</button>' +
         '<button class="ghost" style="color:#c0392b" onclick="deleteTheme()">删除当前主题</button>' +
+        '<button class="ghost" style="color:#c0392b" onclick="formatStorage()">格式化存储</button>' +
       '</div>' +
+      '<div class="hint" id="fsState" style="margin-top:6px">' + fsStateText() + '</div>' +
       '<div style="display:flex;gap:12px;align-items:flex-start;margin-top:12px">' +
         '<canvas id="prev" width="64" height="64" ' +
         'style="width:128px;height:128px;flex:none;image-rendering:pixelated;' +

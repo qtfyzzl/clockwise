@@ -70,6 +70,14 @@ struct ClockwiseParams
     }
 
    
+    // 只写时间戳这一个键。
+    // 时间每 30 分钟存一次，如果走 save() 会把 22 个键全部重写一遍，
+    // 白白增加 flash 磨损。NVS 的每个 key 独立写入，这里只动 lastEpoch。
+    void saveLastEpoch()
+    {
+        preferences.putULong(PREF_LAST_EPOCH, lastEpoch);
+    }
+
     void save()
     {
         preferences.putBool(PREF_SWAP_BLUE_GREEN, swapBlueGreen);

@@ -7,6 +7,8 @@
 // 否则同名类会在链接期冲突（这就是上游只能"链接哪个用哪个"的原因）。
 #include <IClockface.h>
 #include "MarioClockface.h"
+#include "PacmanClockface.h"
+#include "PacmanClockface.h"
 #include "CanvasClockface.h"
 // Commons
 #include <WiFiController.h>
@@ -52,11 +54,13 @@ uint8_t currentBrightSlot = -1;
 // canvas       : 运行时解析 SPIFFS 里的 JSON，可上传任意主题，受 16KB/堆 限制（画布模式）
 // 引擎标识存在 NVS 的 clockfaceEngine 里，切换后重启生效。
 const char *ENGINE_NATIVE_MARIO = "native-mario";
+const char *ENGINE_NATIVE_PACMAN = "native-pacman";
 const char *ENGINE_CANVAS = "canvas";
 
 static const char *engineClockfaceId(const String &engine)
 {
   if (engine == ENGINE_NATIVE_MARIO) return "cw-cf-0x01";
+  if (engine == ENGINE_NATIVE_PACMAN) return "cw-cf-0x05";
   return "cw-cf-0x07";   // 其余一律走 Canvas
 }
 
@@ -64,6 +68,8 @@ static IClockface *createClockface(const String &engine, Adafruit_GFX *display)
 {
   if (engine == ENGINE_NATIVE_MARIO)
     return new MarioClockface(display);
+  if (engine == ENGINE_NATIVE_PACMAN)
+    return new PacmanClockface(display);
   return new CanvasClockface(display);
 }
 
@@ -286,7 +292,8 @@ void setup()
   // 告诉设置页这个固件里编进了哪些引擎（cw-commons 看不到链接了哪些主题）
   ClockwiseWebServer::getInstance()->engineCatalog =
       "canvas|画布模式（Canvas）\n"
-      "native-mario|Mario（原生）\n";
+      "native-mario|Mario（原生）\n"
+      "native-pacman|吃豆人（原生）\n";
   Serial.printf("[App] 主题引擎: %s（对应 %s）\n", engine.c_str(), engineClockfaceId(engine));
 
   // 尽早恢复时间：没有网络时系统时间是 1970，离线页面就只能显示 --:--

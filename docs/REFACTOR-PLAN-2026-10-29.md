@@ -59,12 +59,16 @@ pngkit.py
 
 ---
 
-### P2 · 三个模块把实现全写在头文件里（567 行）
+### P2 · 两个模块把实现全写在头文件里（398 行）
+
+> **执行后修正**：原方案把 `WiFiSetupStateMachine.h` 也列为待拆项，这是错的。
+> 它是纯逻辑状态机（无 Arduino 依赖），被 `test/test_native/` 的单元测试直接
+> include，header-only 正是为了让原生测试无需链接即可运行。拆成 `.cpp`
+> 会破坏可测性，因此**保持原样**。实际只拆了下面两个。
 
 ```
 WiFiController.h         208 行  ← 含 WiFi 状态机、Improv 回调、AP 配网
-StatusController.h       190 行  ← 含 LED、启动动画、屏幕提示
-WiFiSetupStateMachine.h  169 行  ← 含配网流程状态机
+StatusController.h       190 行  ← 含 LED、启动动画、屏幕提示（前 127 行是 PROGMEM 位图）
 ```
 
 **影响**：
@@ -75,13 +79,14 @@ WiFiSetupStateMachine.h  169 行  ← 含配网流程状态机
 **方案**：拆成 `.h`（声明）+ `.cpp`（实现），与已经拆好的 `CWWebServer` 保持一致。
 
 ```
-WiFiController.h   208 → ~60   仅声明 struct + 成员函数原型
-WiFiController.cpp           ~160
-StatusController.h 190 → ~50
-StatusController.cpp         ~150
-WiFiSetupStateMachine.h 169 → ~55
-WiFiSetupStateMachine.cpp    ~125
+WiFiController.h   208 → 46   声明 + extern improvSerial
+WiFiController.cpp         190   实例定义 + 11 个方法
+StatusController.h 190 → 27   仅 struct 声明
+StatusController.cpp       181   位图数据 + 7 个方法
 ```
+
+顺带修掉一处隐患：`ImprovWiFi improvSerial(&Serial);` 原来直接定义在头文件里，
+只要有第二个编译单元包含就会重复定义，现改为 `.cpp` 定义 + 头文件 `extern` 声明。
 
 **验证**：
 - 编译通过 + Flash/RAM 变化在 ±1KB 内

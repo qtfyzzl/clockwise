@@ -257,7 +257,7 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 4294967295,
-          "description": "一轮播完后停顿多久再重来（毫秒），0 = 立即重来"
+          "description": "帧计数重置周期（毫秒），不是停顿时长。= frameDelay×帧数 时无缝循环；大于则播完停顿；小于则动画被截断。未设置或为 0 时回落到 delay"
         },
         "movement": {
           "description": "移动方向。官方主题写整数 0；也接受方向字符串",

@@ -211,12 +211,15 @@ void CanvasClockface::handleSpriteAnimation(std::shared_ptr<CustomSprite>& sprit
         sprite->_lastMillisSpriteFrames = millis();
     }
 
-    // 播完一轮后停顿 loopDelay 毫秒再重播。
+    // loopDelay 是「帧计数重置周期」，不是「播完后再停多久」——这个区别很重要：
+    //   loopDelay == frameDelay × 帧数  → 最后一帧播完正好到点，无缝循环
+    //   loopDelay >  该值             → 播完后停顿 (loopDelay - 播放时长)
+    //   loopDelay <  该值             → 动画播到一半被重置，帧序列被截断
     //
     // 原实现还多一层 `(currentSecond * 1000) % loopDelay == 0`，
     // 只有当 loopDelay 能整除 1000 时才成立 —— 官方主题多用 1000/2000 因此没暴露，
-    // 一旦设成 90 就变成「每 9 秒才重播一次」，表现为动画播 1 秒停 8 秒的卡顿。
-    // 已删除：停顿就是纯时长，跟当前是第几秒无关。
+    // 一旦设成 90 就变成「每 9 秒才重置一次」，表现为动画播 1 秒停 8 秒。
+    // 已删除：重置只看纯时长，跟当前是第几秒无关。
     if (millis() - sprite->_lastResetTime >= loopDelay) {
         sprite->_currentFrameCount = 0;
         sprite->_lastResetTime = millis();

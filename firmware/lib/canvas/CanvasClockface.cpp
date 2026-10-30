@@ -185,6 +185,9 @@ void CanvasClockface::handleSpriteAnimation(std::shared_ptr<CustomSprite>& sprit
     const uint16_t totalFrames = frames.size();
     sprite->_totalFrames = totalFrames > 255 ? 255 : totalFrames;
 
+    // loopDelay 未设置或为 0 时退回用 delay：保证「播完一定会重播」。
+    // （曾经试过让 0 表示"立即重播"，但那样 _currentFrameCount 永不归零，
+    //   动画播一遍就永久停住 —— 比停顿更糟，所以退回这个行为。）
     uint32_t loopDelay = doc["loop"][sprite->_spriteReference]["loopDelay"].as<uint32_t>() ?: delay;
     uint16_t frameDelay = doc["loop"][sprite->_spriteReference]["frameDelay"].as<uint16_t>() ?: delay;
     if (frameDelay == 0) frameDelay = 50;   // 0 会让动画每次循环都触发，白烧 CPU
@@ -208,14 +211,15 @@ void CanvasClockface::handleSpriteAnimation(std::shared_ptr<CustomSprite>& sprit
         sprite->_lastMillisSpriteFrames = millis();
     }
 
+    // 播完一轮后停顿 loopDelay 毫秒再重播。
+    //
+    // 原实现还多一层 `(currentSecond * 1000) % loopDelay == 0`，
+    // 只有当 loopDelay 能整除 1000 时才成立 —— 官方主题多用 1000/2000 因此没暴露，
+    // 一旦设成 90 就变成「每 9 秒才重播一次」，表现为动画播 1 秒停 8 秒的卡顿。
+    // 已删除：停顿就是纯时长，跟当前是第几秒无关。
     if (millis() - sprite->_lastResetTime >= loopDelay) {
-        unsigned long currentMillis = millis();
-        unsigned long currentSecond = _dateTime->getSecond();
-
-        if ((currentSecond * 1000) % loopDelay == 0) {
-            sprite->_currentFrameCount = 0;
-            sprite->_lastResetTime = currentMillis;
-        }
+        sprite->_currentFrameCount = 0;
+        sprite->_lastResetTime = millis();
     }
 }
 

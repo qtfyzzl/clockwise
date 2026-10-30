@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="docx-page-size" content="A4">
+<title>Clockwise 智能挂钟 功能演示</title>
+<style>
+/* 页面规则：正文页脚居中显示页码；封面与目录页不显示 */
+@page {
+  @bottom-center { content: "第 " counter(page) " 页"; }
+}
+@page cover {
+  @bottom-center { content: none; }
+}
+section[role="cover"] { page: cover; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "SimSun", "宋体", serif;
+  font-size: 12pt;
+  line-height: 1.75;
+  color: #1a1a1a;
+  background: #ffffff;
+}
+
+/* ---------- 封面 ---------- */
+.cover {
+  padding: 3.2cm 2.5cm;
+  min-height: 22cm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.cover-category {
+  font-family: "SimHei", "黑体", sans-serif;
+  font-size: 12pt;
+  letter-spacing: 0.35em;
+  color: #1a73e8;
+  margin-bottom: 1.4em;
+}
+.cover-title {
+  font-family: "SimHei", "黑体", sans-serif;
+  font-size: 30pt;
+  font-weight: bold;
+  line-height: 1.35;
+  color: #0f2b46;
+  margin-bottom: 0.7em;
+}
+.cover-subtitle {
+  font-size: 13pt;
+  line-height: 1.9;
+  color: #4a5568;
+  margin-bottom: 3em;
+  max-width: 14cm;
+}
+.cover-rule {
+  width: 2.6cm;
+  height: 3px;
+  background: #1a73e8;
+  margin-bottom: 1.6em;
+}
+.cover-meta {
+  font-size: 10.5pt;
+  color: #718096;
+  line-height: 2;
+}
+
+/* ---------- 目录 ---------- */
+.toc-wrap { padding: 2.4cm 2.5cm; }
+.toc-title {
+  font-family: "SimHei", "黑体", sans-serif;
+  font-size: 18pt;
+  font-weight: bold;
+  color: #0f2b46;
+  margin-bottom: 1.2em;
+  padding-bottom: 0.5em;
+  border-bottom: 2px solid #1a73e8;
+}
+.toc-list, .toc-list ol, .toc-list ul { list-style: none; }
+.toc-list > li { margin: 0.55em 0; text-indent: 0; }
+.toc-list > li > a {
+  font-family: "SimHei", "黑体", sans-serif;
+  font-size: 11.5pt;
+  color: #0f2b46;
+  text-decoration: none;
+}
+.toc-sub { margin: 0.22em 0 0.35em 1.6em; }
+.toc-sub li { margin: 0.2em 0; text-indent: 0; }
+.toc-sub a { font-size: 10.5pt; color: #5a6b7f; text-decoration: none; }
+
+/* ---------- 正文 ---------- */
+.report-body { padding: 1.6cm 2.5cm 2.2cm; }
+section[role="cover"]::after,
+.report-body { page-break-before: always; }
+
+h1.section-header {
+  font-family: "SimHei", "黑体", sans-serif;
+  font-size: 17pt;
+  font-weight: bold;
+  color: #0f2b46;
+  margin: 1.9em 0 0.85em;
+  padding: 0 0 0.42em 0;
+  border-bottom: 2px solid #1a73e8;
+  text-indent: 0;
+}
+.report-body > h1.section-header:first-of-type { margin-top: 0.2em; }
+
+h2.subsection {
+  font-family: "SimHei", "黑体", sans-serif;
+  font-size: 13pt;
+  font-weight: bold;
+  color: #1a73e8;
+  margin: 1.35em 0 0.55em;
+  text-indent: 0;
+}
+
+p.body-text {
+  font-family: "SimSun", "宋体", serif;
+  font-size: 12pt;
+  line-height: 1.85;
+  text-indent: 2em;
+  margin-bottom: 0.72em;
+  text-align: justify;
+}
+
+ul.bullet-list, ol.num-list {
+  margin: 0.55em 0 0.9em 0;
+  padding-left: 2.6em;
+}
+ul.bullet-list li, ol.num-list li {
+  font-family: "SimSun", "宋体", serif;
+  font-size: 12pt;
+  line-height: 1.8;
+  margin-bottom: 0.32em;
+  text-indent: 0;
+}
+
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.85em 0 1.15em;
+  font-family: "SimSun", "宋体", serif;
+  font-size: 10.5pt;
+}
+table.data-table th {
+  background: #eef3fa;
+  font-family: "SimHei", "黑体", sans-serif;
+  font-size: 10.5pt;
+  font-weight: bold;
+  color: #0f2b46;
+  padding: 0.5em 0.7em;
+  border: 1px solid #c9d6e5;
+  text-align: left;
+}
+table.data-table td {
+  padding: 0.45em 0.7em;
+  border: 1px solid #dbe4ee;
+  line-height: 1.6;
+}
+table.data-table tbody tr:nth-child(even) { background: #fafcfe; }
+
+code {
+  font-family: "Consolas", monospace;
+  font-size: 10.5pt;
+  background: #f1f4f8;
+  padding: 0.05em 0.3em;
+  border-radius: 2px;
+}
+strong { font-weight: bold; color: #0f2b46; }
+</style>
+</head>
+<body>
+
+<!-- 封面 -->
+<section role="cover" class="cover">
+  <p class="cover-category">项目功能演示</p>
+  <p class="cover-title">Clockwise 智能挂钟 功能演示</p>
+  <div class="cover-rule"></div>
+  <p class="cover-subtitle">双主题引擎 · 空中升级 · 离线兜底<br>ESP32 驱动 64×64 全彩点阵面板</p>
+  <div class="cover-meta">
+    <p>Clockwise 开源智能挂钟项目</p>
+    <p>2026 年 10 月</p>
+  </div>
+</section>
+
+<!-- 目录（独占一节，目录页无页眉页脚） -->
+<section role="cover">
+  <div class="toc-wrap">
+    <p class="toc-title">目 录</p>
+    <ol class="toc-list">
+<li><a href="#section-1">一、项目概述</a><ol class="toc-sub"><li><a href="#sub-1-265">关键指标</a></li></ol>
+</li>
+<li><a href="#section-2">二、功能总览</a>
+</li>
+<li><a href="#section-3">三、核心功能详解</a><ol class="toc-sub"><li><a href="#sub-3-694">3.1 双主题引擎</a></li></ol><ol class="toc-sub"><li><a href="#sub-3-836">3.2 主题体系与内容生态</a></li></ol><ol class="toc-sub"><li><a href="#sub-3-609">3.3 空中升级</a></li></ol><ol class="toc-sub"><li><a href="#sub-3-567">3.4 中文设置页</a></li></ol><ol class="toc-sub"><li><a href="#sub-3-720">3.5 离线兜底</a></li></ol><ol class="toc-sub"><li><a href="#sub-3-182">3.6 显示与功耗管理</a></li></ol>
+</li>
+<li><a href="#section-4">四、技术架构</a><ol class="toc-sub"><li><a href="#sub-4-489">4.1 分层结构</a></li></ol><ol class="toc-sub"><li><a href="#sub-4-179">4.2 内存分配</a></li></ol><ol class="toc-sub"><li><a href="#sub-4-4">4.3 稳定性设计</a></li></ol>
+</li>
+<li><a href="#section-5">五、工具链</a>
+</li>
+<li><a href="#section-6">六、使用指南</a><ol class="toc-sub"><li><a href="#sub-6-320">6.1 首次配网</a></li></ol><ol class="toc-sub"><li><a href="#sub-6-663">6.2 更换主题</a></li></ol><ol class="toc-sub"><li><a href="#sub-6-946">6.3 升级固件</a></li></ol>
+</li>
+<li><a href="#section-7">七、后续规划</a>
+</li>
+<li><a href="#section-8">八、结语</a>
+</li>
+    </ol>
+  </div>
+</section>
+
+<!-- 正文 -->
+<section role="body" class="report-body" data-page-restart="1">
+<h1 class="section-header" id="section-1">一、项目概述</h1>
+<p class="body-text">Clockwise 是一款基于 ESP32 的开源智能挂钟固件，驱动 64×64 全彩 LED 点阵面板（HUB75 接口）。设备以 32 厘米见方的像素化画面同时承担时间显示与视觉装饰两种角色，支持联网对时、主题切换、亮度自适应与空中升级。</p>
+<p class="body-text">本项目在开源原版的基础上完成了面向实际使用的系统性改造，核心变化集中在三个方面：主题体系从"单一主题"扩展为"原生 + 画布双引擎"、配置界面全面中文化并做了传输优化、补齐了 OTA 空中升级与离线兜底等工程化能力。</p>
+<h2 class="subsection">关键指标</h2>
+<table class="data-table"><thead><tr><th>指标</th><th>数值</th><th>说明</th></tr></thead><tbody><tr><td>显示面板</td><td>64×64 RGB LED</td><td>HUB75 接口，1:32 扫描</td></tr><tr><td>主控</td><td>ESP32</td><td>双核 240 MHz，4 MB Flash</td></tr><tr><td>固件体积</td><td>1.74 MB</td><td>占 app 分区 91%</td></tr><tr><td>静态内存占用</td><td>61.6 KB</td><td>占可用 RAM 19.3%</td></tr><tr><td>可选主题</td><td>20 个</td><td>18 个画布主题 + 2 个原生主题</td></tr><tr><td>升级耗时</td><td>24–48 秒</td><td>全程无线，无需拆机</td></tr></tbody></table>
+<h1 class="section-header" id="section-2">二、功能总览</h1>
+<table class="data-table"><thead><tr><th>功能模块</th><th>能力说明</th><th>状态</th></tr></thead><tbody><tr><td>双主题引擎</td><td>画布模式与原生模式共存，网页一键切换</td><td>已交付</td></tr><tr><td>画布主题</td><td>JSON 描述的自定义主题，网页上传即用</td><td>已交付</td></tr><tr><td>原生主题</td><td>图片编译进 Flash，零运存开销</td><td>已交付</td></tr><tr><td>中文设置页</td><td>全中文界面，含主题预览与实时参数</td><td>已交付</td></tr><tr><td>空中升级</td><td>双分区 OTA，网页或命令行推送</td><td>已交付</td></tr><tr><td>离线时钟</td><td>断网自动进入简约数字钟画面</td><td>已交付</td></tr><tr><td>自动亮度</td><td>光敏电阻闭环调光，含迟滞防抖</td><td>已交付</td></tr><tr><td>时间持久化</td><td>断网重启后仍保持大致正确的时间</td><td>已交付</td></tr><tr><td>网络自愈</td><td>连不上时每分钟重试一次</td><td>已交付</td></tr><tr><td>主题工具链</td><td>校验、格式转换、预览、批量上传</td><td>已交付</td></tr><tr><td>桌面设计器</td><td>图形化主题编辑器（Windows）</td><td>已交付</td></tr></tbody></table>
+<h1 class="section-header" id="section-3">三、核心功能详解</h1>
+<h2 class="subsection">3.1 双主题引擎</h2>
+<p class="body-text">原版的架构约束是"同一份固件只能编译进一个主题"，切换主题需要修改工程配置并重新烧录。本项目将其改造为运行时可选的双引擎结构。</p>
+<p class="body-text"><strong>画布模式（Canvas）</strong> 面向自定义需求。主题以 JSON 文件描述，包含背景色、静态元素、精灵序列与动画参数。用户在设置页上传 JSON 即可生效，设备将其存入内部闪存，断网状态下同样可用。</p>
+<p class="body-text"><strong>原生模式（Native）</strong> 面向性能与画质。主题的图像资源以 RGB565 原始像素数组编译进 Flash，运行时直接从内存映射区读取绘制，不经过解码流程。</p>
+<p class="body-text">两种模式的资源占用差异显著：</p>
+<table class="data-table"><thead><tr><th>项目</th><th>画布模式</th><th>原生模式</th><th>差值</th></tr></thead><tbody><tr><td>空闲堆内存</td><td>82.9 KB</td><td>128.9 KB</td><td>+46 KB</td></tr><tr><td>最大连续块</td><td>41.0 KB</td><td>86.0 KB</td><td>+45 KB</td></tr><tr><td>单主题 Flash 占用</td><td>2–14 KB</td><td>约 11 KB</td><td>—</td></tr></tbody></table>
+<p class="body-text">差异主要来自画布模式必须常驻 48 KB 的 PNG 解码缓冲。这也解释了为什么复杂主题在画布模式下难以承载，而原生模式可以轻松运行。</p>
+<p class="body-text">切换在设置页完成，引擎清单由固件动态上报，新增原生主题无需改动前端。</p>
+<h2 class="subsection">3.2 主题体系与内容生态</h2>
+<p class="body-text">当前设备内置 20 个主题，分为两类：</p>
+<p class="body-text"><strong>画布主题（18 个）</strong> 包括吃豆人、彩虹猫、圣诞史努比、星际大战、复古电脑、多种角色插画等。每帧图像为 8-bit RGB 编码的 PNG，单帧解码后不超过 4 KB。</p>
+<p class="body-text"><strong>原生主题（2 个）</strong> 为马里奥与吃豆人，均为社区经典主题的固件内置版本。</p>
+<p class="body-text">主题引擎对图像格式有明确要求，这些约束来自设备端的实际解码能力：</p>
+<table class="data-table"><thead><tr><th>约束项</th><th>要求</th><th>违反后果</th></tr></thead><tbody><tr><td>文件格式</td><td>仅 PNG</td><td>JPEG 等格式无法解码</td></tr><tr><td>位深</td><td>8-bit</td><td>1/2-bit 索引色会导致设备反复重启</td></tr><tr><td>单帧体积</td><td>≤ 4096 字节</td><td>超出则跳过该帧</td></tr><tr><td>主题文件</td><td>≤ 16 KB</td><td>超出则无法解析</td></tr></tbody></table>
+<h2 class="subsection">3.3 空中升级</h2>
+<p class="body-text">设备采用 A/B 双分区方案，新固件写入空闲分区，校验通过后才切换启动项。任何一步失败都保持原分区启动，不存在因升级失败而变砖的风险。</p>
+<p class="body-text">分区布局如下：</p>
+<table class="data-table"><thead><tr><th>分区</th><th>偏移</th><th>大小</th><th>用途</th></tr></thead><tbody><tr><td>nvs</td><td>0x009000</td><td>20 KB</td><td>用户设置</td></tr><tr><td>otadata</td><td>0x00E000</td><td>8 KB</td><td>启动分区记录</td></tr><tr><td>app0</td><td>0x010000</td><td>1.81 MB</td><td>固件槽 A</td></tr><tr><td>app1</td><td>0x1E0000</td><td>1.81 MB</td><td>固件槽 B</td></tr><tr><td>spiffs</td><td>0x3B0000</td><td>256 KB</td><td>主题存储</td></tr><tr><td>coredump</td><td>0x3F0000</td><td>64 KB</td><td>崩溃现场</td></tr></tbody></table>
+<p class="body-text">升级提供两条通道：</p>
+<p class="body-text"><strong>网页上传</strong> 在设置页选择固件文件，页面显示实时进度，传完自动重启，全程不依赖电脑端工具。</p>
+<p class="body-text"><strong>命令行推送</strong> 适合开发调试，一条命令完成，配合固件内置的 mDNS 可直接用主机名寻址。</p>
+<p class="body-text">实测数据表明该链路效率可观：</p>
+<table class="data-table"><thead><tr><th>次数</th><th>耗时</th><th>平均速率</th><th>结果</th></tr></thead><tbody><tr><td>第一次</td><td>32.5 秒</td><td>52.2 KB/s</td><td>校验通过</td></tr><tr><td>第二次</td><td>20.4 秒</td><td>85.0 KB/s</td><td>校验通过</td></tr><tr><td>第三次</td><td>32.8 秒</td><td>53.0 KB/s</td><td>校验通过</td></tr></tbody></table>
+<p class="body-text">三次升级分别写入不同分区，验证了双槽轮换的可靠性。升级前后主题存储占用完全一致，说明分区隔离有效。</p>
+<h2 class="subsection">3.4 中文设置页</h2>
+<p class="body-text">设置页是设备的主要交互入口，全部界面中文化，采用单页应用结构，分为显示、时间、主题引擎、画布主题、固件升级五个分组。</p>
+<p class="body-text">为保证弱网环境下的可用性，做了三项针对性优化：</p>
+<p class="body-text"><strong>预压缩传输</strong> 页面在编译期以 gzip 压缩，32 KB 源文件压缩至 13.5 KB，传输量减少约 58%。</p>
+<p class="body-text"><strong>非阻塞写入</strong> 响应采用分块写入并设置超时，客户端不接收数据时主动放弃，不会拖住主循环。</p>
+<p class="body-text"><strong>请求串行化</strong> 单连接服务下将并发请求排队，避免请求互相踩踏。</p>
+<p class="body-text">页面还内置主题预览功能：上传主题后可即时看到 64×64 的渲染效果，无需等待设备重启。</p>
+<h2 class="subsection">3.5 离线兜底</h2>
+<p class="body-text">设计上假定网络随时可能不可用。当设备启动后 20 秒仍未连上网络，屏幕自动切换为简约数字钟：</p>
+<ul class="bullet-list"><li>四位数码管风格的大号数字，占满屏幕宽度</li><li>底部一行小字标注"no wifi"</li><li>时间来源为闪存中保存的最后一次同步值，配合运行时长推算</li></ul>
+<p class="body-text">设备的 WiFi 模块在离线状态下每分钟重试一次连接，同时保留配网热点，手机可随时连入重新配置网络。这一设计使设备在路由器重启、密码变更等常见场景下能够自行恢复。</p>
+<h2 class="subsection">3.6 显示与功耗管理</h2>
+<p class="body-text"><strong>自动亮度</strong> 通过光敏电阻感知环境光，将读数线性映射到面板亮度。实现中包含三项防护：双端钳位防止读数越界导致亮度跳变、上下限相等时按最亮处理避免除零、迟滞比较避免临界点反复切换。</p>
+<p class="body-text"><strong>时间持久化</strong> 设备无电池 RTC，断电后系统时间会归零。固件每 30 分钟将当前时间写入闪存，重启后若网络未就绪则用该值恢复，使离线画面仍能显示大致正确的时间。写入采用单键更新，避免为保存一个时间戳而重写全部配置项。</p>
+<h1 class="section-header" id="section-4">四、技术架构</h1>
+<h2 class="subsection">4.1 分层结构</h2>
+<p class="body-text">固件采用三层结构：应用层负责启动流程与主循环调度，基础服务层提供网络、配置、Web 服务与状态提示，主题层实现具体的画面渲染。两层主题引擎共享统一的时钟界面接口，应用层通过工厂方法在运行时实例化其中一个。</p>
+<h2 class="subsection">4.2 内存分配</h2>
+<p class="body-text">ESP32 的 320 KB 可用 RAM 需要同时容纳协议栈、图形缓冲与应用数据，分配情况如下：</p>
+<table class="data-table"><thead><tr><th>项目</th><th>占用</th><th>占比</th></tr></thead><tbody><tr><td>静态变量</td><td>61.6 KB</td><td>19.3%</td></tr><tr><td>PNG 解码缓冲（仅画布模式）</td><td>47.0 KB</td><td>14.7%</td></tr><tr><td>主题 JSON 缓冲</td><td>16.0 KB</td><td>5.0%</td></tr><tr><td>空闲堆</td><td>82.9–128.9 KB</td><td>26%–40%</td></tr></tbody></table>
+<p class="body-text">其中图像解码缓冲必须在 WiFi 启动前抢占，否则协议栈初始化后堆内存碎片化，大块分配会失败。</p>
+<h2 class="subsection">4.3 稳定性设计</h2>
+<p class="body-text">改造过程中定位并修复了若干会导致设备不可用的问题，这些问题在功能演示中构成了可靠性基础：</p>
+<table class="data-table"><thead><tr><th>问题</th><th>现象</th><th>处理</th></tr></thead><tbody><tr><td>索引色图像崩溃</td><td>设备无限重启</td><td>强制 8-bit RGB，加载前校验</td></tr><tr><td>闪存自动格式化</td><td>主题全部丢失</td><td>改为手动触发，并给出界面提示</td></tr><tr><td>超大主题卡死</td><td>设备无响应，串口无输出</td><td>加载前按容量拦截，不再回落远程</td></tr><tr><td>引擎切换失效</td><td>设置不生效</td><td>补齐参数写入分支</td></tr><tr><td>图片超限越界读</td><td>部分主题图片不显示</td><td>补充尺寸与长度校验</td></tr></tbody></table>
+<p class="body-text">其中"超大主题卡死"的根因链条值得记录：主题文件超出解析缓冲后解析失败，旧逻辑会转而从远程服务器拉取同名主题，而远程 TLS 握手不受超时控制，最终阻塞主循环。当前版本在文件大小层面就做了拦截，不再触发远程回落。</p>
+<h1 class="section-header" id="section-5">五、工具链</h1>
+<p class="body-text">围绕主题制作与维护，配套了完整的工具集：</p>
+<table class="data-table"><thead><tr><th>工具</th><th>用途</th></tr></thead><tbody><tr><td>主题校验</td><td>检查 JSON 结构、图片格式、体积与引用完整性</td></tr><tr><td>格式转换</td><td>将不合规图像重编码为设备支持的格式</td></tr><tr><td>画面预览</td><td>在电脑上渲染主题效果，烧录前核对</td></tr><tr><td>批量上传</td><td>按名单同步主题到设备</td></tr><tr><td>页面打包</td><td>将设置页压缩为固件可内嵌的数组</td></tr><tr><td>桌面设计器</td><td>图形化编辑主题，输出规范 JSON</td></tr></tbody></table>
+<p class="body-text">工具之间存在明确的职责边界：校验工具负责发现问题，转换工具负责修复，设计器负责创作。三者共享同一套图像编解码实现，避免因实现不一致导致的反复。</p>
+<h1 class="section-header" id="section-6">六、使用指南</h1>
+<h2 class="subsection">6.1 首次配网</h2>
+<p class="body-text">设备上电后若未保存网络信息，会自动开启名为 Clockwise-Wifi 的配置热点。手机连接该热点后访问 192.168.4.1，选择目标网络并输入密码即可。设备同时支持通过串口以 Improv 协议推送凭据，适合批量部署场景。</p>
+<h2 class="subsection">6.2 更换主题</h2>
+<p class="body-text">进入设置页的主题分组，画布模式下列表展示设备内已有主题，点选即可切换；原生模式下展示固件内置的引擎，切换后重启生效。</p>
+<p class="body-text">上传新主题时选择 JSON 文件，填写主题名后上传。系统会在上传前校验文件大小，超过 16 KB 的主题会被直接拦截并提示精简建议。</p>
+<h2 class="subsection">6.3 升级固件</h2>
+<p class="body-text">设置页最下方的固件升级分组，选择 bin 文件后上传，页面显示百分比进度，完成后设备自动重启。升级期间请勿断电。</p>
+<h1 class="section-header" id="section-7">七、后续规划</h1>
+<p class="body-text"><strong>主题容量扩展</strong> 现有 8 个主题因文件体积超出解析缓冲而无法使用，包括马里奥、桃子公主等系列。可选路径包括：精简帧数至体积达标、将图像资源外置为独立二进制文件、或将这些主题转为原生模式实现。</p>
+<p class="body-text"><strong>原生主题补充</strong> 上游尚有 4 个原生主题未集成（文字时钟、世界地图、恶魔城、宝可梦图鉴）。当前固件余量约 154 KB，按单主题 10.9 KB 计算完全可容纳。</p>
+<p class="body-text"><strong>图像转换工具</strong> 计划在桌面设计器中增加 RGB565 导出能力，使任意图像可一键转为可编译的固件资源，进一步降低原生主题的制作门槛。</p>
+<h1 class="section-header" id="section-8">八、结语</h1>
+<p class="body-text">本项目在保持原有硬件平台与开源协议的前提下，完成了从"能跑的示例"到"可日常使用的产品"的转变。核心工作围绕三条主线展开：以双引擎解决主题能力的天花板问题，以 OTA 解决维护成本问题，以一系列边界防护解决稳定性问题。</p>
+<p class="body-text">当前设备已稳定运行，20 个主题、两种渲染模式、无线升级与离线兜底均已可用。后续将重点推进主题容量扩展与制作工具链的完善。</p>
+</section>
+
+</body>
+</html>

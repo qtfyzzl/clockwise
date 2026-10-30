@@ -63,6 +63,8 @@ def build(icon):
         "--noconfirm", "--clean", "--onefile", "--windowed",
         "--name", APP,
         "--icon", icon,
+        "--paths", os.path.join(ROOT, "tools"),
+        "--hidden-import", "pngkit",
         "--add-data", "%s%s." % (os.path.join(HERE, "fontdata.json"), os.pathsep),
         "--distpath", DIST,
         "--workpath", WORK,

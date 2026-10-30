@@ -1,0 +1,45 @@
+request_id: 20261029-clockwise-functions
+created_at: "2026-10-29T23:06:00+08:00"
+entry_type: full_pipeline
+current_stage: done
+chain: [S1, S2, S3]
+
+output_docx_path: "C:\\Users\\26541\\WorkBuddy\\clockwise\\output\\20261029-clockwise-functions\\stage3\\Clockwise智能挂钟-功能速览.docx"
+output_docx_user_specified: false
+
+stage_1:
+  status: completed
+  completed_at: "2026-10-29T23:09:00+08:00"
+  executor: doc-writer
+  expert_used: general-writer
+  route_tag: general_writing
+  genre: general
+  output_path: "stage1/final_draft.md"
+  word_count: 1697
+  gate: passed
+
+stage_2:
+  status: completed
+  completed_at: "2026-10-29T23:12:00+08:00"
+  executor: doc-formatter
+  route: html
+  html_sub: template
+  template_used: business-report
+  output_path: "stage2/formatted-Clockwise智能挂钟功能速览.html"
+  output_format: html
+  contract_checks: 12/12 passed
+  intermediate_dir: "C:\\Users\\26541\\WorkBuddy\\clockwise\\output\\20261029-clockwise-functions\\stage2\\intermediate"
+
+stage_3:
+  status: completed
+  completed_at: "2026-10-29T23:14:00+08:00"
+  executor: doc-converter
+  output_path: "stage3/Clockwise智能挂钟-功能速览.docx"
+  skill_used: ["html-to-doc"]
+  present_files_opened: true
+  preflight: passed
+  fallback: false
+
+consistency_check:
+  chain_completed: [S1, S2, S3]
+  all_stages_ok: true

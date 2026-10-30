@@ -123,7 +123,7 @@ def main():
         for x in range(80):
             img.putpixel((x, y), (x * 3 % 256, y * 3 % 256, 128))
     res = C.auto_fit_image(img, bg=(0, 0, 0))
-    check("自动压缩到 1024 内", res is not None and res.ok,
+    check("自动压缩到 4096 内", res is not None and res.ok,
           "%dx%d %d B" % (res.width, res.height, res.size) if res else "None")
     app.theme["setup"].append({"type": "image", "image": res.b64, "x": 8, "y": 8})
     app.sel = len(app.theme["setup"]) - 1

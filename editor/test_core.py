@@ -106,7 +106,7 @@ def _fake_photo(w=160, h=120):
 
 
 def test_image_compress():
-    print("[图片压缩 ≤1024B]")
+    print("[图片压缩 ≤4096B]")
     photo = _fake_photo()
     res = C.auto_fit_image(photo, limit=C.IMAGE_DECODE_LIMIT, bg=(0, 0, 0))
     check("auto_fit 有结果", res is not None)
@@ -271,11 +271,11 @@ def test_crop_and_options():
     check("裁剪尺寸", cropped.size == (60, 40), str(cropped.size))
     check("裁剪越界被 clamp", C.crop_image(img, (-10, -10, 200, 200)).size == img.size)
 
-    # 多方案：应返回多个可选，且都 <= 1024
+    # 多方案：应返回多个可选，且都 <= 4096
     opts = C.gen_image_options(img, bg=(0, 0, 0))
     check("多方案数量 > 3", len(opts) > 3, "%d 个" % len(opts))
     ok_opts = [o for o in opts if o["ok"]]
-    check("有可用的方案", len(ok_opts) > 0, "%d 个 <=1024B" % len(ok_opts))
+    check("有可用的方案", len(ok_opts) > 0, "%d 个 <=4096B" % len(ok_opts))
     check("方案排序递减", all(opts[i]["bytes"] >= opts[i + 1]["bytes"]
                               for i in range(len(opts) - 1)))
 
@@ -290,10 +290,32 @@ def test_crop_and_options():
     check("裁剪图可压缩", res.width <= 32 and res.height <= 32, str((res.width, res.height)))
 
 
+def test_png_guard():
+    print("[8-bit RGB 输出 / 1-2bit 拦截]")
+    # 上机图片：prepare_image 必须输出 8-bit RGB（颜色类型 2）
+    res = C.prepare_image(Image.new("RGB", (16, 16), (255, 0, 0)), 16, 16, 2)
+    png = res.png
+    check("prepare_image 输出 8-bit RGB", png[24] == 8 and png[25] == 2,
+          "bd=%d ct=%d 体积=%dB" % (png[24], png[25], len(png)))
+
+    # 校验器必须拦住 1/2-bit 索引色（会崩设备）
+    pal = [(0, 0, 0), (255, 0, 0)]
+    idx = [0] * 16
+    bad = C.encode_indexed_png(idx, pal, 4, 4)
+    theme = C.default_theme()
+    theme["sprites"] = [[{"image": base64.b64encode(bad).decode("ascii")}]]
+    theme["loop"] = [{"type": "sprite", "sprite": 0, "x": 0, "y": 0}]
+    issues = C.validate(theme)
+    check("校验器拦截 1/2-bit 索引色",
+          any(lv == "error" and "索引色" in m for lv, m in issues),
+          str([m for lv, m in issues if lv == "error"][:2]))
+
+
 def main():
     test_colors()
     test_fonts()
     test_png()
+    test_png_guard()
     test_image_compress()
     test_theme()
     test_datetime()

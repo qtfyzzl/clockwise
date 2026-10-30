@@ -6,7 +6,8 @@
   1. RGB565 颜色换算（Canvas JSON 只认十进制 565）
   2. Adafruit GFXfont 位图字体渲染（与固件 getTextBounds / drawChar 一致）
   3. 64x64 画面渲染（复刻 Clockface::renderElements / refreshDateTime）
-  4. 图片压缩：缩放 → 调色板量化 → 索引色 PNG（解码后必须 <=1024 字节）
+  4. 图片压缩：缩放 → 调色板量化 → **8-bit RGB PNG**
+     （解码后必须 <=4096 字节；禁止 1/2-bit 索引色，PNGdec 1.0.1 会崩溃重启）
 """
 
 import base64
@@ -35,9 +36,10 @@ from PIL import Image
 # ---------------------------------------------------------------- 固件限制
 
 PANEL = 64
-JSON_DOC_CAPACITY = 49152     # firmware: static DynamicJsonDocument doc(49152)
-JSON_SAFE_BYTES = 46080       # 留 3KB 余量（ArduinoJson 池按 token 计，不按文件字节）
-IMAGE_DECODE_LIMIT = 1024     # PNGRender.h: IMAGE_BUFFER_SIZE
+JSON_DOC_CAPACITY = 16384     # firmware: CanvasClockface.cpp DynamicJsonDocument doc(16384)
+JSON_SAFE_BYTES = 15000       # 留 ~1.4KB 余量（ArduinoJson 池按 token 计，不按文件字节）
+IMAGE_DECODE_LIMIT = 4096     # PNGRender.h: IMAGE_BUFFER_SIZE（上游 1024，定制固件已提到 4096）
+MAX_THEME_PIXELS = 40000      # 精灵总像素（帧数×宽×高）建议上限，超过易掉帧
 IMAGE_MAX_WIDTH = 64          # PNGRender.h: uint16_t usPixels[64]
 IMAGE_MAX_HEIGHT = 64
 NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
@@ -870,6 +872,36 @@ def load_theme_file(path):
 
 # ---------------------------------------------------------------- 校验
 
+def png_meta(raw):
+    """解析 PNG IHDR。返回 (w, h, bitdepth, colortype, interlaced) 或 None。"""
+    if len(raw) < 33 or raw[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    w, h = struct.unpack(">II", raw[16:24])
+    return (w, h, raw[24], raw[25], raw[28])
+
+
+def _check_png_compat(raw, tag, add):
+    """按 THEME-SPEC 检查 PNG 位深/颜色类型/隔行，返回 (w, h) 或 None。"""
+    meta = png_meta(raw)
+    if meta is None:
+        add("error", "%s 不是合法 PNG（PNGdec 只吃 PNG）" % tag)
+        return None
+    w, h, bd, ct, inter = meta
+    if inter:
+        add("error", "%s 是隔行扫描 PNG，设备拒绝绘制（导出时选非隔行）" % tag)
+    if ct == 3 and bd in (1, 2):
+        add("error", "%s 是 %d-bit 索引色 PNG → PNGdec 1.0.1 位解包缺陷，"
+                     "设备会无限重启；请导出 8-bit RGB/RGBA" % (tag, bd))
+    elif ct == 3:
+        add("warn", "%s 是 %d-bit 调色板 PNG（官方主题可用，但建议 8-bit RGB 最稳）"
+            % (tag, bd))
+    elif ct not in (0, 2, 6):
+        add("error", "%s PNG 颜色类型 %d 不受支持" % (tag, ct))
+    elif bd != 8:
+        add("warn", "%s 位深 %d（建议 8-bit）" % (tag, bd))
+    return (w, h)
+
+
 def validate(theme, when=None):
     """返回 [(level, message)]，level ∈ error/warn/info。"""
     issues = []
@@ -936,8 +968,8 @@ def validate(theme, when=None):
             if len(raw) > IMAGE_DECODE_LIMIT:
                 add("error", "%s PNG %d B > %d B（IMAGE_BUFFER_SIZE），设备上不会显示"
                     % (tag, len(raw), IMAGE_DECODE_LIMIT))
-            if raw[:8] != b"\x89PNG\r\n\x1a\n":
-                add("error", "%s 不是 PNG（PNGdec 只吃 PNG）" % tag)
+            meta = _check_png_compat(raw, tag, add)
+            if meta is None:
                 continue
             box = element_box(el, when)
             if box[2] - box[0] > IMAGE_MAX_WIDTH:
@@ -948,6 +980,7 @@ def validate(theme, when=None):
     # ---- 精灵校验 ----
     groups = theme.get("sprites", []) or []
     loop = theme.get("loop", []) or []
+    total_px = 0
 
     for gi, group in enumerate(groups):
         group = group or []
@@ -973,15 +1006,19 @@ def validate(theme, when=None):
             if raw[:8] != b"\x89PNG\r\n\x1a\n":
                 add("error", "精灵 #%d 第 %d 帧不是 PNG" % (gi + 1, fi + 1))
                 continue
-            try:
-                im = Image.open(io.BytesIO(raw))
-                sizes.append(im.size)
-            except Exception:
-                sizes.append(None)
+            meta = _check_png_compat(raw, "精灵 #%d 第 %d 帧" % (gi + 1, fi + 1), add)
+            if meta is None:
+                continue
+            total_px += meta[0] * meta[1]
+            sizes.append((meta[0], meta[1]))
         real = [s for s in sizes if s is not None]
         if len(set(real)) > 1:
             add("warn", "精灵组 #%d 各帧尺寸不一致 %s：固件用第一帧尺寸，其他帧会错位/裁切"
                 % (gi + 1, real))
+
+    if total_px > MAX_THEME_PIXELS:
+        add("warn", "精灵总像素 %d > %d，动画可能掉帧（减少帧数或缩小尺寸）"
+            % (total_px, MAX_THEME_PIXELS))
 
     for i, entry in enumerate(loop):
         entry = entry or {}

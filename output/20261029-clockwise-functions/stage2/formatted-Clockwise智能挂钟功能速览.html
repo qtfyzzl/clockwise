@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="docx-page-size" content="A4">
+<title>Clockwise 智能挂钟 功能速览</title>
+<style>
+/* 页面规则：正文页脚居中显示页码；封面与目录页不显示 */
+@page {
+  @bottom-center { content: "第 " counter(page) " 页"; }
+}
+@page cover {
+  @bottom-center { content: none; }
+}
+section[role="cover"] { page: cover; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "SimSun", "宋体", serif;
+  font-size: 12pt;
+  line-height: 1.75;
+  color: #1a1a1a;
+  background: #ffffff;
+}
+
+/* ---------- 封面 ---------- */
+.cover {
+  padding: 3.2cm 2.5cm;
+  min-height: 22cm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.cover-category {
+  font-family: "SimHei", "黑体", sans-serif;
+  font-size: 12pt;
+  letter-spacing: 0.35em;
+  color: #1a73e8;
+  margin-bottom: 1.4em;
+}
+.cover-title {
+  font-family: "SimHei", "黑体", sans-serif;
+  font-size: 30pt;
+  font-weight: bold;
+  line-height: 1.35;
+  color: #0f2b46;
+  margin-bottom: 0.7em;
+}
+.cover-subtitle {
+  font-size: 13pt;
+  line-height: 1.9;
+  color: #4a5568;
+  margin-bottom: 3em;
+  max-width: 14cm;
+}
+.cover-rule {
+  width: 2.6cm;
+  height: 3px;
+  background: #1a73e8;
+  margin-bottom: 1.6em;
+}
+.cover-meta {
+  font-size: 10.5pt;
+  color: #718096;
+  line-height: 2;
+}
+
+/* ---------- 目录 ---------- */
+.toc-wrap { padding: 2.4cm 2.5cm; }
+.toc-title {
+  font-family: "SimHei", "黑体", sans-serif;
+  font-size: 18pt;
+  font-weight: bold;
+  color: #0f2b46;
+  margin-bottom: 1.2em;
+  padding-bottom: 0.5em;
+  border-bottom: 2px solid #1a73e8;
+}
+.toc-list, .toc-list ol, .toc-list ul { list-style: none; }
+.toc-list > li { margin: 0.55em 0; text-indent: 0; }
+.toc-list > li > a {
+  font-family: "SimHei", "黑体", sans-serif;
+  font-size: 11.5pt;
+  color: #0f2b46;
+  text-decoration: none;
+}
+.toc-sub { margin: 0.22em 0 0.35em 1.6em; }
+.toc-sub li { margin: 0.2em 0; text-indent: 0; }
+.toc-sub a { font-size: 10.5pt; color: #5a6b7f; text-decoration: none; }
+
+/* ---------- 正文 ---------- */
+.report-body { padding: 1.6cm 2.5cm 2.2cm; }
+section[role="cover"]::after,
+.report-body { page-break-before: always; }
+
+h1.section-header {
+  font-family: "SimHei", "黑体", sans-serif;
+  font-size: 17pt;
+  font-weight: bold;
+  color: #0f2b46;
+  margin: 1.9em 0 0.85em;
+  padding: 0 0 0.42em 0;
+  border-bottom: 2px solid #1a73e8;
+  text-indent: 0;
+}
+.report-body > h1.section-header:first-of-type { margin-top: 0.2em; }
+
+h2.subsection {
+  font-family: "SimHei", "黑体", sans-serif;
+  font-size: 13pt;
+  font-weight: bold;
+  color: #1a73e8;
+  margin: 1.35em 0 0.55em;
+  text-indent: 0;
+}
+
+p.body-text {
+  font-family: "SimSun", "宋体", serif;
+  font-size: 12pt;
+  line-height: 1.85;
+  text-indent: 2em;
+  margin-bottom: 0.72em;
+  text-align: justify;
+}
+
+ul.bullet-list, ol.num-list {
+  margin: 0.55em 0 0.9em 0;
+  padding-left: 2.6em;
+}
+ul.bullet-list li, ol.num-list li {
+  font-family: "SimSun", "宋体", serif;
+  font-size: 12pt;
+  line-height: 1.8;
+  margin-bottom: 0.32em;
+  text-indent: 0;
+}
+
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.85em 0 1.15em;
+  font-family: "SimSun", "宋体", serif;
+  font-size: 10.5pt;
+}
+table.data-table th {
+  background: #eef3fa;
+  font-family: "SimHei", "黑体", sans-serif;
+  font-size: 10.5pt;
+  font-weight: bold;
+  color: #0f2b46;
+  padding: 0.5em 0.7em;
+  border: 1px solid #c9d6e5;
+  text-align: left;
+}
+table.data-table td {
+  padding: 0.45em 0.7em;
+  border: 1px solid #dbe4ee;
+  line-height: 1.6;
+}
+table.data-table tbody tr:nth-child(even) { background: #fafcfe; }
+
+code {
+  font-family: "Consolas", monospace;
+  font-size: 10.5pt;
+  background: #f1f4f8;
+  padding: 0.05em 0.3em;
+  border-radius: 2px;
+}
+strong { font-weight: bold; color: #0f2b46; }
+</style>
+</head>
+<body>
+
+<!-- 封面 -->
+<section role="cover" class="cover">
+  <p class="cover-category">功能速览</p>
+  <p class="cover-title">Clockwise 智能挂钟 功能速览</p>
+  <div class="cover-rule"></div>
+  <p class="cover-subtitle">换主题 · 自动调光 · 断网兜底 · 一键升级<br>手机浏览器即可操作，无需安装 App</p>
+  <div class="cover-meta">
+    <p>Clockwise 开源智能挂钟项目</p>
+    <p>2026 年 10 月</p>
+  </div>
+</section>
+
+<!-- 目录（独占一节，目录页无页眉页脚） -->
+<section role="cover">
+  <div class="toc-wrap">
+    <p class="toc-title">目 录</p>
+    <ol class="toc-list">
+<li><a href="#section-1">一块能换脸的点阵钟</a>
+</li>
+<li><a href="#section-2">功能一览</a>
+</li>
+<li><a href="#section-3">设置页里能调什么</a><ol class="toc-sub"><li><a href="#sub-3-855">显示</a></li></ol><ol class="toc-sub"><li><a href="#sub-3-388">时间</a></li></ol><ol class="toc-sub"><li><a href="#sub-3-752">主题引擎</a></li></ol><ol class="toc-sub"><li><a href="#sub-3-825">主题管理</a></li></ol><ol class="toc-sub"><li><a href="#sub-3-812">固件升级</a></li></ol>
+</li>
+<li><a href="#section-4">内置主题</a>
+</li>
+<li><a href="#section-5">断网也能用</a>
+</li>
+<li><a href="#section-6">上手三步</a>
+</li>
+    </ol>
+  </div>
+</section>
+
+<!-- 正文 -->
+<section role="body" class="report-body" data-page-restart="1">
+<h1 class="section-header" id="section-1">一块能换脸的点阵钟</h1>
+<p class="body-text">32 厘米见方的全彩 LED 点阵屏，联网自动对时，手机打开网页就能换主题、调亮度、升级固件。放在客厅是钟，放在桌上是一件会动的像素画。</p>
+<table class="data-table"><thead><tr><th>项目</th><th>说明</th></tr></thead><tbody><tr><td>屏幕</td><td>64×64 全彩 LED 点阵，32 厘米见方</td></tr><tr><td>联网</td><td>Wi-Fi 自动对时，断网也能走时</td></tr><tr><td>主题</td><td>内置 20 套，也可以自己做</td></tr><tr><td>操作</td><td>手机浏览器打开网页，无需装 App</td></tr><tr><td>升级</td><td>网页上传固件，不用拆机</td></tr></tbody></table>
+<h1 class="section-header" id="section-2">功能一览</h1>
+<table class="data-table"><thead><tr><th>功能</th><th>你能看到什么</th></tr></thead><tbody><tr><td>看时间</td><td>大号数字显示时分，也可用动画、图形、文字表达</td></tr><tr><td>换主题</td><td>20 套画面随时切换，风格从游戏到插画</td></tr><tr><td>自己做主题</td><td>上传一个文件，屏幕立刻变成你设计的画面</td></tr><tr><td>每天自动换</td><td>开启后每天零点自动切到下一套</td></tr><tr><td>自动调光</td><td>房间暗屏幕就暗，开灯自动变亮，夜里不刺眼</td></tr><tr><td>定时熄屏</td><td>房间暗到一定程度可以自动关屏</td></tr><tr><td>转屏幕</td><td>横装竖装都行，画面方向可调</td></tr><tr><td>断网兜底</td><td>没网时自动显示简约数字钟，不会黑屏</td></tr><tr><td>自动重连</td><td>网络恢复后自动连回去，不用管</td></tr><tr><td>一键升级</td><td>网页选文件上传，一两分钟完成，不用拆机</td></tr></tbody></table>
+<h1 class="section-header" id="section-3">设置页里能调什么</h1>
+<p class="body-text">设置页是设备的全部操作入口，手机连上同一网络后，浏览器打开设备地址即可。页面分五组。</p>
+<h2 class="subsection">显示</h2>
+<table class="data-table"><thead><tr><th>设置项</th><th>作用</th></tr></thead><tbody><tr><td>屏幕亮度</td><td>0–255 手动调节，0 等于关屏</td></tr><tr><td>自动亮度</td><td>填两个数值（房间最暗、最亮时的读数），屏幕亮度自动跟随环境变化</td></tr><tr><td>读取当前光照</td><td>点一下就能看到光敏电阻的实时读数，用来标定上面两个数值</td></tr><tr><td>屏幕方向</td><td>0° / 90° / 180° / 270°，装反了或想竖装都能调</td></tr><tr><td>刷新率</td><td>8 / 16 / 20 MHz，画面更流畅但要求线材质量，闪屏就调回 8 MHz</td></tr></tbody></table>
+<h2 class="subsection">时间</h2>
+<table class="data-table"><thead><tr><th>设置项</th><th>作用</th></tr></thead><tbody><tr><td>12 / 24 小时制</td><td>切换显示格式</td></tr><tr><td>时区</td><td>例如 Asia/Shanghai，决定本地时间</td></tr><tr><td>对时服务器</td><td>默认用阿里云 NTP，可自行更换</td></tr><tr><td>手动时区串</td><td>断网也想准确走时时填写，例如 CST-8</td></tr></tbody></table>
+<h2 class="subsection">主题引擎</h2>
+<p class="body-text">设备有两种渲染方式，在页面上以按钮列出，点一下切换、重启生效。</p>
+<table class="data-table"><thead><tr><th>模式</th><th>特点</th></tr></thead><tbody><tr><td>画布模式</td><td>主题是文件，可随时上传更换，适合自己折腾</td></tr><tr><td>原生模式</td><td>主题固化在设备里，动画更流畅，可选马里奥、吃豆人等</td></tr></tbody></table>
+<h2 class="subsection">主题管理</h2>
+<table class="data-table"><thead><tr><th>设置项</th><th>作用</th></tr></thead><tbody><tr><td>当前主题</td><td>显示正在使用的主题名</td></tr><tr><td>主题列表</td><td>从设备里读出全部主题，下拉即可切换</td></tr><tr><td>预览窗口</td><td>128×128 的实时预览，切换前先看效果</td></tr><tr><td>上传主题</td><td>选择 JSON 文件上传，传完自动应用</td></tr><tr><td>删除主题</td><td>移除不要的主题，若删的是当前主题会自动切到其它</td></tr><tr><td>立即切到下一个</td><td>手动跳到下一套主题</td></tr><tr><td>每天自动切换</td><td>开启后每天零点自动换一套</td></tr><tr><td>格式化存储</td><td>主题空间异常时用来重建，会清空全部主题</td></tr></tbody></table>
+<h2 class="subsection">固件升级</h2>
+<p class="body-text">选择固件文件上传，页面显示上传进度，完成后设备自动重启。升级失败会自动回退到旧版本，不会变砖。</p>
+<h1 class="section-header" id="section-4">内置主题</h1>
+<p class="body-text">设备预置 20 套主题，风格分布如下。</p>
+<table class="data-table"><thead><tr><th>类型</th><th>主题</th></tr></thead><tbody><tr><td>游戏角色</td><td>马里奥、吃豆人、恶魔城、太空侵略者、大金刚、蘑菇怪</td></tr><tr><td>卡通形象</td><td>彩虹猫、史努比、玉桂狗、库洛米、美乐蒂、三丽鸥</td></tr><tr><td>场景画面</td><td>星战、亚马逊、复古电脑、时钟俱乐部、电子乌托邦</td></tr><tr><td>自制文字</td><td>蛇形流动字、竖排流动字（可自己生成）</td></tr></tbody></table>
+<p class="body-text">原生模式目前提供马里奥与吃豆人两套，动画由设备直接绘制，帧率更稳。</p>
+<h1 class="section-header" id="section-5">断网也能用</h1>
+<table class="data-table"><thead><tr><th>情况</th><th>设备表现</th></tr></thead><tbody><tr><td>忘记配网</td><td>自动开启 Clockwise-Wifi 热点，手机连上即可配置</td></tr><tr><td>路由器重启</td><td>每分钟自动重试一次，恢复后自动连回</td></tr><tr><td>长时间无网络</td><td>20 秒后切到简约数字钟，用上次同步的时间继续走</td></tr><tr><td>断电重启</td><td>时间从上次同步点恢复，误差等于断电时长</td></tr></tbody></table>
+<h1 class="section-header" id="section-6">上手三步</h1>
+<ol class="num-list"><li>通电后手机连接名为 Clockwise-Wifi 的热点，浏览器打开 192.168.4.1，选择家里的 Wi-Fi 并输入密码。</li><li>设备连上网络后，在浏览器打开设备地址，进入设置页。</li><li>在主题列表里挑一套喜欢的画面，点选即可。</li></ol>
+<p class="body-text">想换自制主题时，在设置页选好 JSON 文件上传，屏幕会立刻变成新画面。</p>
+</section>
+
+</body>
+</html>

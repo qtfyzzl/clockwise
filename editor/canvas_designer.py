@@ -4,7 +4,7 @@
 
 特性：
   * 像素级 WYSIWYG：直接用固件的位图字体渲染，所见即设备所显
-  * 图片压缩：自动缩放 → 调色板量化 → 索引色 PNG，实时显示解码体积（必须 <=1024B）
+  * 图片压缩：自动缩放 → 调色板量化 → 8-bit RGB PNG，实时显示解码体积（必须 <=4096B；禁止 1/2-bit 索引色）
   * 实时校验：JSON 体积上限、元素溢出、图片超限
   * 读写主题 JSON；上传到设备 / 从设备读取
 
@@ -314,7 +314,7 @@ class ImageDialog(tk.Toplevel):
 
     def __init__(self, master, src_path=None, bg_rgb=(0, 0, 0), on_ok=None):
         tk.Toplevel.__init__(self, master)
-        self.title("导入图片（自动压进 1024 字节）")
+        self.title("导入图片（自动压进 4096 字节，8-bit RGB）")
         self.configure(bg=CLR_BG)
         self.resizable(False, False)
         self.transient(master)
@@ -427,7 +427,7 @@ class ImageDialog(tk.Toplevel):
 
         btns = ttk.Frame(box)
         btns.pack(fill="x", pady=(8, 0))
-        ttk.Button(btns, text="自动压到 1024B 以内", command=self._auto).pack(side="left")
+        ttk.Button(btns, text="自动压到 4096B 以内", command=self._auto).pack(side="left")
         ttk.Button(btns, text="取消", command=self.destroy).pack(side="right")
         self.ok_btn = ttk.Button(btns, text="确定", command=self._ok)
         self.ok_btn.pack(side="right", padx=6)
@@ -549,10 +549,10 @@ class ImageDialog(tk.Toplevel):
         self.size_lbl.configure(
             text="%dx%d · %d 色 · PNG %d B  (%s)" % (
                 res.width, res.height, res.colors, res.size,
-                "可放进设备" if ok else "超出 1024B"),
+                "可放进设备" if ok else "超出 4096B"),
             foreground=CLR_OK if ok else CLR_ERR)
         self.detail_lbl.configure(
-            text="base64 %d 字符（固件解码缓冲 1024B）· 阈值 %d B"
+            text="base64 %d 字符（固件解码缓冲 4096B）· 阈值 %d B"
                  % (len(res.b64), C.IMAGE_DECODE_LIMIT))
         self.ok_btn.state([] if ok else ["disabled"])
         view = res.image(scale=1)
@@ -577,10 +577,10 @@ class ImageDialog(tk.Toplevel):
                                    max_h=min(self.maxh_var.get(), 64),
                                    mode=self._params()["mode"])
         self._options = opts
-        # 只展示前 10 个（按体积从大到小，即观感从好到差），且都 <=1024
+        # 只展示前 10 个（按体积从大到小，即观感从好到差），且都 <=4096
         shown = [o for o in opts if o["ok"]][:10]
         if not shown:
-            ttk.Label(self._options_host, text="没有 <=1024B 的方案，请裁剪或降低要求。",
+            ttk.Label(self._options_host, text="没有 <=4096B 的方案，请裁剪或降低要求。",
                       style="Muted.TLabel").pack(anchor="w")
             return
         row_frame = None
@@ -622,7 +622,7 @@ class ImageDialog(tk.Toplevel):
                                mode=p["mode"], smooth=p["smooth"], dither=p["dither"])
         if res is None:
             messagebox.showwarning("放不下",
-                                   "即使缩到 8px / 2 色也超过 1024 字节，请换更简单的小图。",
+                                   "即使缩到 8px / 2 色也超过 4096 字节，请换更简单的小图。",
                                    parent=self)
             return
         self.colors_var.set(str(res.colors))
@@ -668,6 +668,8 @@ class Designer(tk.Tk):
         self._photo = None
         self._anim_t0 = 0.0
         self._frame_refs = []
+        self._props_mode = None   # 属性面板当前显示：None / "element" / "loop"
+        self._props_loop_li = None  # loop 模式下对应的 loop 索引
         self._cfg = self._load_cfg()
         self.ip_var = tk.StringVar(value=self._cfg.get("ip", "192.168.137.99"))
         self.live_var = tk.BooleanVar(value=True)
@@ -796,7 +798,7 @@ class Designer(tk.Tk):
         hm.add_command(label="关于", command=lambda: messagebox.showinfo(
             "关于", "%s %s\n\n64x64 Canvas 主题编辑器\n"
                     "字体与色彩取自固件实现，预览与设备一致。\n"
-                    "固件限制：JSON <= 48KB，单图 PNG <= 1024B 且宽 <= 64px。"
+                    "固件限制：JSON <= 16KB，单图 PNG <= 4096B 且宽/高 <= 64px。"
                     % (APP_NAME, APP_VER), parent=self))
         m.add_cascade(label="帮助", menu=hm)
         self.config(menu=m)
@@ -901,6 +903,7 @@ class Designer(tk.Tk):
         sb.pack(side="right", fill="y")
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+        self.tree.bind("<Button-1>", self._on_tree_click)
 
         addbar = ttk.Frame(elem_tab, style="Panel.TFrame", padding=(6, 8, 6, 6))
         addbar.pack(fill="x")
@@ -1034,6 +1037,7 @@ class Designer(tk.Tk):
         self.loop_tree.column("info", width=200, anchor="w")
         self.loop_tree.pack(side="left", fill="x", expand=True)
         self.loop_tree.bind("<<TreeviewSelect>>", self._on_loop_select)
+        self.loop_tree.bind("<Button-1>", self._on_loop_click)
 
         lbtn = ttk.Frame(tab, style="Panel.TFrame", padding=(6, 0, 6, 6))
         lbtn.pack(fill="x")
@@ -1155,6 +1159,18 @@ class Designer(tk.Tk):
             return
         li = self._sel_loop_entry()
         if li is not None:
+            self._props_mode = "loop"
+            self._props_loop_li = li
+            self.edit_loop_entry(li)
+
+    def _on_loop_click(self, _evt):
+        """点 loop 列表（即使选中项没变）也强制切回 loop 属性面板。"""
+        if self._suppress:
+            return
+        li = self._sel_loop_entry()
+        if li is not None and self._props_mode != "loop":
+            self._props_mode = "loop"
+            self._props_loop_li = li
             self.edit_loop_entry(li)
 
     def sprite_add_group(self):
@@ -1255,24 +1271,37 @@ class Designer(tk.Tk):
         for w in host.winfo_children():
             w.destroy()
         host.columnconfigure(1, weight=1)
+        self._prop_vars = {}
         ttk.Label(host, text="loop 实例 #%d" % li, style="Head.TLabel").grid(
             row=0, column=0, columnspan=2, sticky="w", pady=(2, 8))
+
+        # 帧数：用于 frameDelay→loopDelay 联动
+        groups = self._sprite_groups()
+        ref = int(entry.get("sprite", 0) or 0)
+        frame_count = len(groups[ref]) if 0 <= ref < len(groups) else 1
 
         def label(text, r):
             ttk.Label(host, text=text, style="Panel.TLabel").grid(
                 row=r, column=0, sticky="w", pady=3)
 
-        def num(key, r, text, lo=0, hi=32767, width=7):
+        def num(key, r, text, lo=0, hi=32767, width=7, on_change=None):
             label(text, r)
             var = tk.IntVar(value=int(entry.get(key, 0) or 0))
             sp = ttk.Spinbox(host, from_=lo, to=hi, width=width, textvariable=var)
             sp.grid(row=r, column=1, sticky="w", pady=3)
-            var.trace_add("write", lambda *a, k=key, v=var: self._set_loop_num(li, k, v))
+            self._prop_vars[key] = var
+            # 提交：回车 / 失焦 / 点击箭头 时统一落盘（避免逐位输入触发）
+            def commit(_evt=None):
+                self._set_loop_num(li, key, var)
+                if on_change:
+                    on_change()
+            sp.bind("<Return>", commit)
+            sp.bind("<FocusOut>", commit)
+            sp.configure(command=commit)
             return var
 
         r = 1
         label("引用精灵", r)
-        groups = self._sprite_groups()
         ref_var = tk.StringVar(value=str(entry.get("sprite", 0)))
         ref_cb = ttk.Combobox(host, values=[str(i) for i in range(len(groups))],
                               textvariable=ref_var, width=5, state="readonly")
@@ -1285,10 +1314,15 @@ class Designer(tk.Tk):
         r += 1
         num("y", r, "起始 y", -64, 127)
         r += 1
-        num("frameDelay", r, "帧延时 ms", 1, 60000)
+
+        # 帧延时改动 → 同步循环周期 = 帧延时 × 帧数
+        self._loop_frame_delay_var = num(
+            "frameDelay", r, "帧延时 ms", 1, 60000,
+            on_change=lambda: self._sync_loop_delay(li))
         r += 1
-        num("loopDelay", r, "循环周期 ms", 1, 60000)
+        self._loop_loop_delay_var = num("loopDelay", r, "循环周期 ms", 1, 60000)
         r += 1
+
         num("moveStartTime", r, "位移触发 ms", 0, 60000)
         r += 1
         num("moveDuration", r, "位移时长 ms", 0, 60000)
@@ -1305,10 +1339,38 @@ class Designer(tk.Tk):
             row=r, column=0, columnspan=2, sticky="w", pady=4)
         r += 1
 
-        ttk.Label(host, text="提示：位移只在 moveDuration>0 且目标 x/y 之一 >-1 时生效。\n"
-                              "moveTargetX/Y 填 -1 表示该方向不动。",
+        ttk.Label(host, text="帧延时改动会自动同步循环周期（帧延时 × %d 帧）。\n"
+                             "位移只在 moveDuration>0 且目标 x/y 之一 >-1 时生效。\n"
+                             "moveTargetX/Y 填 -1 表示该方向不动。" % frame_count,
                   style="Muted.TLabel", wraplength=286, justify="left").grid(
             row=r, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+    def _sync_loop_delay(self, li):
+        """帧延时改动后，同步循环周期 = 帧延时 × 帧数。"""
+        entries = self._loop_entries()
+        if not (0 <= li < len(entries)):
+            return
+        entry = entries[li]
+        groups = self._sprite_groups()
+        ref = int(entry.get("sprite", 0) or 0)
+        frame_count = len(groups[ref]) if 0 <= ref < len(groups) else 1
+        fd = int(entry.get("frameDelay", 0) or 0)
+        if fd <= 0 or frame_count <= 0:
+            return
+        new_loop = fd * frame_count
+        if entry.get("loopDelay") == new_loop:
+            return
+        self.snapshot("loop:num:loopDelay")
+        entry["loopDelay"] = new_loop
+        # 同步回界面上的循环周期输入框
+        if getattr(self, "_loop_loop_delay_var", None) is not None:
+            try:
+                if int(self._loop_loop_delay_var.get()) != new_loop:
+                    self._loop_loop_delay_var.set(new_loop)
+            except Exception:
+                pass
+        self._refresh_sprite_tab()
+        self._refresh_issues()
 
     def _set_loop_num(self, li, key, var, is_str=False):
         entries = self._loop_entries()
@@ -1326,6 +1388,9 @@ class Designer(tk.Tk):
         self._mark_dirty()
         self._refresh_sprite_tab()
         self._refresh_issues()
+        # 切换引用精灵后帧数变了，重新同步循环周期
+        if key == "sprite":
+            self._sync_loop_delay(li)
 
     def _set_loop_bool(self, li, key, var):
         entries = self._loop_entries()
@@ -1842,8 +1907,28 @@ class Designer(tk.Tk):
         if not sel:
             return
         self.sel = int(sel[0])
+        # 切回元素模式，重画元素属性面板
+        self._props_mode = "element"
+        self._props_loop_li = None
         self.rebuild_props()
         self.redraw()
+
+    def _on_tree_click(self, _evt):
+        """点元素树（即使选中项没变）也强制切回元素属性面板。
+
+        用户从 loop 属性切回元素时，若点的是原本就选中的那项，
+        <<TreeviewSelect>> 不会触发，这里用 Button-1 兜底。
+        """
+        if self._suppress:
+            return
+        if self._props_mode != "element":
+            sel = self.tree.selection()
+            if sel:
+                self.sel = int(sel[0])
+                self._props_mode = "element"
+                self._props_loop_li = None
+                self.rebuild_props()
+                self.redraw()
 
     def _size_text(self):
         s = C.theme_summary(self.theme)
@@ -1886,6 +1971,13 @@ class Designer(tk.Tk):
 
     # ---------- 属性面板 ----------
     def rebuild_props(self):
+        """按当前模式重建属性面板。loop 模式优先于元素模式。"""
+        if self._props_mode == "loop" and self._props_loop_li is not None:
+            self.edit_loop_entry(self._props_loop_li)
+            return
+        self._rebuild_element_props()
+
+    def _rebuild_element_props(self):
         for child in self.props_host.winfo_children():
             child.destroy()
         el = self.current()
@@ -2619,11 +2711,11 @@ setup 元素
   m-d  10-28      D, m/d  Wed, 10/28     A  PM
 
 固件硬限制（超了就是静默不显示）
-  主题 JSON      <= 48KB（DynamicJsonDocument(49152)）
-  单张图片 PNG   解码后 <= 1024 字节（IMAGE_BUFFER_SIZE）
+  主题 JSON      <= 16KB（DynamicJsonDocument(16384)）
+  单张图片 PNG   解码后 <= 4096 字节（IMAGE_BUFFER_SIZE），8-bit RGB/RGBA
   图片宽度       <= 64px（usPixels[64]）
   格式            必须是 PNG，JPG 不行
-  坐标            x/y 取 uint8，0..255，屏幕只有 0..63
+  坐标            x/y 取 0..63（超出部分由屏幕裁剪）
 
 颜色是 RGB565：
   value = ((R>>3)<<11) | ((G>>2)<<5) | (B>>3)

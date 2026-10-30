@@ -1,0 +1,48 @@
+{
+  "name": "月薪喵-表盘",
+  "version": 1,
+  "author": "WorkBuddy",
+  "bgColor": 0,
+  "delay": 880,
+  "setup": [
+    {
+      "type": "datetime",
+      "content": "H:i",
+      "font": "big",
+      "fgColor": 65535,
+      "x": 11,
+      "y": 14
+    }
+  ],
+  "sprites": [
+    [
+      {
+        "image": "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAA4klEQVR42tWWyxHCMAxEUw3NpC0qoATOVEEFXOiAQ840YMxo0IjIn904JsSjQ8Ze7bMTW/EwbNKe071vSlRTCaz+nfA4nsAcSvyVI2nVUCXtrjGdxxjWVHpmMpShajXNAfRZ54R+LpsJAjQ4BgLg3JMAPDjAwTTvlRylASGEAsCPbr2C2/USowUgDhwmeWh9QNbVXVStH9DcCyvIvS5dAbSO3OzKn+SfDtpixsJ/Zy/rJEBqnK90NkUFXQBWs1tA03bKAX69XzlA+LSZRa6fviAhgKZz0BcgDF9ibc8KN+0WwAtQ4uTa5x0mJwAAAABJRU5ErkJggg=="
+      },
+      {
+        "image": "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAzklEQVR42mNgGBDw6cVV2moBqiZJA6nqQRqetEwiUg9JilH0QLQRRHCVJJsORy8WeQMRsqEQETRlxNoBVw03FJcFcDbcTcRGF7JOIi2AI9LsIMYC0kzHagHxaKRZoIYEMM3CKkvA6AuH1gARJRZATCDNGqyZFhMRZTTBOCBYfhDldjw+wBVccB8Q5Q9crsMfJYMpmZJtB5l1J62MxmoBpIzDLOmGnQVwNTSxAFnZ4LOAmFREcqb7DwNohuISHy4WkJZSMYtYZBEqtLQpsQAApNYLsDlLl/IAAAAASUVORK5CYII="
+      },
+      {
+        "image": "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAABIklEQVR42s2WMQ7CMAxFexYGJg7AzITEtTgBMxMzp+gJEBI3YOiMxAwGC8vYSePftILoD1Fi/+c0bZqm+Um7dZdpUygaSkDjXwnX7S6YAwV/5XBaURIJu4u6w4akTXnEhEUZEi2mOYD0pabodunMIEBEJvd2FWVEAN6dBQDiYofoCijOdLSSs8BXI8lJ99wsBpCnmVuBny1Yn9ojqWYF7BDF+Br1521mQ9bFPTDnB7wHXIV/UKL5uyWndC6wAu/ewxjymg770ADGeb0k7ReznDgA/uEYRj8ALj+5CBK9MMm+AfA5SIIB4qvdDUAO2j8ACEa7a2mALwvYCV2sL1+vYOD7atxN+SMAHp9mLHLj8AUpAqi6pE4LYIY/YvXICDftGsATGEDeQEWDAgwAAAAASUVORK5CYII="
+      },
+      {
+        "image": "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAA/UlEQVR42mNgGBDw6cVV2moBqiZJA6nqQRqetEwiUg9JilH0QLQRRHCVJJsORy8WeQMRsqEQETRlxNoBVw03FJcFcDbcTcRGF7JOIi2AI9LsIMYC0kzHagHxiGQL1MAAl3GYsqRZANeM1Q6ssgMdRBcOrQEiSiyAmEC+NXiyN1FGEwwiguUHUW7H4wM8iQpZL5k+UEMCVMsHNMloyHZc8rAAojk6SrgQRAHJFQ6aHfgtINn5WD0BRF8POWFlU80CuLnIpg+MBZDCHIiIsgbZdGSEbAGaFjItwAx96luA6XysFpCW6f7DAFqewiU+XCwgLb1iFrHIIlRoaVNiAQCrz+FIpxQHrAAAAABJRU5ErkJggg=="
+      }
+    ]
+  ],
+  "loop": [
+    {
+      "type": "sprite",
+      "sprite": 0,
+      "x": 16,
+      "y": 28,
+      "frameDelay": 220,
+      "loopDelay": 880,
+      "moveStartTime": 0,
+      "moveDuration": 0,
+      "moveTargetX": -1,
+      "moveTargetY": -1,
+      "shouldReturnToOrigin": false
+    }
+  ]
+}

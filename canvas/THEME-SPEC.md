@@ -109,7 +109,43 @@ Backtrace: 只有一层（栈已损坏）
 
 ---
 
-## 四、两个工具
+## 四、机器可读的约束：theme.schema.json
+
+`canvas/theme.schema.json` 是同一套规则的 **JSON Schema（Draft 2020-12）** 版本，
+用于编辑器自动补全、CI 校验，或让你在写主题时即时发现问题。
+
+它由现有 35 个官方主题反推校准，能通过全部官方主题；同时能拦住常见的错误写法：
+
+| 能拦住的错误 | 拦不住（需 check_theme.py） |
+| --- | --- |
+| 缺字段、字段类型错、多余字段 | 文件总大小超过 16384 字节 |
+| `type` 拼错、坐标越界（>63） | 图片不是 PNG / 是 JPEG |
+| 图片 base64 超过体积上限 | 1/2-bit 索引色（会闪退） |
+| `sprite` 下标为负 | base64 解出来的数据本身损坏 |
+| 颜色值超范围（>65535） | 引用完整性（loop 引用了不存在的 sprite） |
+
+用法：
+
+```bash
+# 命令行校验（需要 jsonschema）
+pip install jsonschema
+python -c "import json,jsonschema,sys; \
+  s=json.load(open('canvas/theme.schema.json')); \
+  jsonschema.validate(json.load(open(sys.argv[1])), s); print('OK')" 你的主题.json
+```
+
+在 VS Code 里打开主题 JSON 时，把 `$schema` 指向该文件即可获得补全与报错提示：
+
+```json
+{ "$schema": "../theme.schema.json", "name": "...", ... }
+```
+
+> 两者是互补关系：schema 管"结构与值域"，check_theme.py 管"设备能不能真的跑起来"。
+> 上线前两个都过一遍。
+
+---
+
+## 五、两个工具
 
 ### 1. 生成前自检
 
@@ -133,7 +169,7 @@ python tools/fix_theme_images.py canvas/snake-text.json
 
 ---
 
-## 五、常见错误速查
+## 六、常见错误速查
 
 | 现象 | 原因 |
 |---|---|

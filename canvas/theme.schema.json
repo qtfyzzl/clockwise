@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/26541/clockwise/canvas/theme.schema.json",
+  "title": "Clockwise Canvas 主题",
+  "description": "64×64 点阵钟的运行时主题描述文件。\n\n【文件级硬约束（schema 无法表达，由 tools/check_theme.py 检查）】\n1. 整个 JSON 文件 ≤ 16384 字节 —— 设备解析缓冲上限，超出无法加载\n2. 每张图片 base64 解码后 ≤ 4096 字节 —— 超出该帧被跳过\n3. 图片必须是 PNG；JPEG 不认；1/2-bit 索引色会让设备无限重启\n4. 坐标 0–63，超出画面部分被裁掉\n\n本 schema 由现有 35 个主题反推校准，能通过全部官方主题。\n制作完成后用 `python tools/check_theme.py <文件>` 自检，再上传设备。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "version", "author", "bgColor", "setup", "sprites", "loop"],
+
+  "properties": {
+    "name": {
+      "type": "string",
+      "maxLength": 32,
+      "description": "主题显示名，出现在设置页的主题列表里"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "主题版本号，整数，从 1 开始"
+    },
+    "author": {
+      "type": "string",
+      "maxLength": 32,
+      "description": "作者署名，显示在设备启动日志里"
+    },
+    "bgColor": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535,
+      "description": "背景色，RGB565 格式。0 = 黑，65535 = 白"
+    },
+    "delay": {
+      "type": "integer",
+      "minimum": 20,
+      "maximum": 60000,
+      "default": 100,
+      "description": "默认帧间隔（毫秒）。loop 元素未单独指定 frameDelay 时用它，官方主题常用 40–300"
+    },
+
+    "setup": {
+      "type": "array",
+      "description": "静态层：开机绘制一次，之后不重绘。适合背景、边框、固定文字。",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/elemImage" },
+          { "$ref": "#/$defs/elemText" },
+          { "$ref": "#/$defs/elemDatetime" },
+          { "$ref": "#/$defs/elemLine" },
+          { "$ref": "#/$defs/elemRect" }
+        ]
+      }
+    },
+
+    "sprites": {
+      "type": "array",
+      "maxItems": 16,
+      "description": "精灵序列集合。每个元素是一组动画帧（数组的数组），loop 里通过下标引用。",
+      "items": {
+        "type": "array",
+        "maxItems": 64,
+        "items": { "$ref": "#/$defs/frame" }
+      }
+    },
+
+    "loop": {
+      "type": "array",
+      "description": "动态层：每帧重绘的内容。放精灵动画、走动的位置等。",
+      "items": { "$ref": "#/$defs/loopSprite" }
+    }
+  },
+
+  "$defs": {
+
+    "imageData": {
+      "anyOf": [
+        {
+          "const": "",
+          "description": "空图：该位置不绘制，用作占位"
+        },
+        {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 5464,
+          "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+          "description": "PNG 的 base64（不带 data: 前缀）。maxLength 5464 ≈ 解码后 4096 字节上限。必须是 8-bit RGB/RGBA/调色板 PNG。"
+        }
+      ]
+    },
+
+    "coord": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 63,
+      "description": "画面坐标，0–63（含）"
+    },
+
+    "rgb565": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535,
+      "description": "RGB565 颜色值"
+    },
+
+    "elementId": {
+      "type": "string",
+      "maxLength": 16,
+      "description": "元素标识，仅供编辑器内部引用，设备不使用。官方主题里最长 10 字符"
+    },
+
+    "note": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "备注，设备忽略"
+    },
+
+    "elemImage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "x", "y", "image"],
+      "description": "贴图元素：把一张 PNG 画到指定位置",
+      "properties": {
+        "type": { "const": "image" },
+        "x": { "$ref": "#/$defs/coord" },
+        "y": { "$ref": "#/$defs/coord" },
+        "image": { "$ref": "#/$defs/imageData" },
+        "id": { "$ref": "#/$defs/elementId" },
+        "comment": { "$ref": "#/$defs/note" }
+      }
+    },
+
+    "elemText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "x", "y", "content", "font", "fgColor", "bgColor"],
+      "description": "静态文字元素",
+      "properties": {
+        "type": { "const": "text" },
+        "x": { "$ref": "#/$defs/coord" },
+        "y": { "$ref": "#/$defs/coord" },
+        "content": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "要显示的文字。画面只有 64 像素宽，建议不超过 10 个字符"
+        },
+        "font": {
+          "type": "string",
+          "description": "字体名。留空用默认；可用 picopixel / square / big / medium"
+        },
+        "fgColor": { "$ref": "#/$defs/rgb565" },
+        "bgColor": { "$ref": "#/$defs/rgb565" },
+        "id": { "$ref": "#/$defs/elementId" },
+        "comment": { "$ref": "#/$defs/note" }
+      }
+    },
+
+    "elemDatetime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "content", "font", "fgColor", "bgColor", "x", "y"],
+      "description": "时间文字元素：content 用占位符表达时分秒，由固件替换为当前时间",
+      "properties": {
+        "type": { "const": "datetime" },
+        "x": { "$ref": "#/$defs/coord" },
+        "y": { "$ref": "#/$defs/coord" },
+        "content": {
+          "type": "string",
+          "maxLength": 20,
+          "description": "格式串，例如 \"h:mm\" 或 \"HH:MM:SS\"，占位符见 canvas/THEME-SPEC.md"
+        },
+        "font": { "type": "string", "description": "字体名，留空用默认" },
+        "fgColor": { "$ref": "#/$defs/rgb565" },
+        "bgColor": { "$ref": "#/$defs/rgb565" },
+        "id": { "$ref": "#/$defs/elementId" },
+        "comment": { "$ref": "#/$defs/note" }
+      }
+    },
+
+    "elemLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "color", "x", "y", "x1", "y1"],
+      "description": "直线元素",
+      "properties": {
+        "type": { "const": "line" },
+        "color": { "$ref": "#/$defs/rgb565" },
+        "x": { "$ref": "#/$defs/coord" },
+        "y": { "$ref": "#/$defs/coord" },
+        "x1": { "$ref": "#/$defs/coord" },
+        "y1": { "$ref": "#/$defs/coord" },
+        "id": { "$ref": "#/$defs/elementId" },
+        "comment": { "$ref": "#/$defs/note" }
+      }
+    },
+
+    "elemRect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "color", "x", "y", "width", "height"],
+      "description": "填充矩形元素",
+      "properties": {
+        "type": { "const": "rect" },
+        "color": { "$ref": "#/$defs/rgb565" },
+        "x": { "$ref": "#/$defs/coord" },
+        "y": { "$ref": "#/$defs/coord" },
+        "width": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "id": { "$ref": "#/$defs/elementId" },
+        "comment": { "$ref": "#/$defs/note" }
+      }
+    },
+
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image"],
+      "description": "精灵的一帧。image 为空字符串表示该帧不绘制（用于制造停顿）。",
+      "properties": {
+        "image": { "$ref": "#/$defs/imageData" },
+        "id": { "$ref": "#/$defs/elementId" },
+        "comment": { "$ref": "#/$defs/note" }
+      }
+    },
+
+    "loopSprite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "x", "y", "sprite"],
+      "description": "循环层里的精灵动画：按帧序列在指定位置反复播放",
+      "properties": {
+        "type": { "const": "sprite" },
+        "x": { "$ref": "#/$defs/coord" },
+        "y": { "$ref": "#/$defs/coord" },
+        "sprite": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "引用 sprites 数组的下标，必须小于 sprites 的长度"
+        },
+        "id": { "$ref": "#/$defs/elementId" },
+        "comment": { "$ref": "#/$defs/note" },
+        "frameDelay": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 65535,
+          "description": "本动画的帧间隔（毫秒），覆盖顶层 delay"
+        },
+        "loopDelay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "一轮播完后停顿多久再重来（毫秒），0 = 立即重来"
+        },
+        "movement": {
+          "description": "移动方向。官方主题写整数 0；也接受方向字符串",
+          "anyOf": [
+            { "type": "integer", "minimum": 0, "maximum": 8 },
+            { "type": "string", "enum": ["none", "left", "right", "up", "down"] }
+          ]
+        },
+        "moveStartTime": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "开始移动的时刻（毫秒，相对动画起点）"
+        },
+        "moveDuration": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "移动持续时长（毫秒）"
+        },
+        "moveTargetX": { "$ref": "#/$defs/coord" },
+        "moveTargetY": { "$ref": "#/$defs/coord" },
+        "shouldReturnToOrigin": {
+          "type": "boolean",
+          "description": "到达目标后是否返回原位"
+        }
+      }
+    }
+  }
+}

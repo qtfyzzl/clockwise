@@ -224,6 +224,16 @@ def _int(value, default=0):
         return default
 
 
+def _xy(el):
+    """元素左上角整数坐标。"""
+    return _int(el.get("x")), _int(el.get("y"))
+
+
+def _wh(el):
+    """矩形类元素宽高。"""
+    return _int(el.get("width")), _int(el.get("height"))
+
+
 def _clip(value, lo, hi):
     return lo if value < lo else (hi if value > hi else value)
 
@@ -544,24 +554,24 @@ def render_theme_animated(theme, t_ms=0, when=None):
 
 def render_element(canvas, el, when=None):
     kind = el.get("type")
-    x = int(el.get("x", 0) or 0)
-    y = int(el.get("y", 0) or 0)
+    x, y = _xy(el)
     if kind in ("text", "datetime"):
         text = element_text(el, when)
         font = get_font(el.get("font"))
-        fg = int(el.get("fgColor", 65535) or 0)
+        fg = _int(el.get("fgColor", 65535))
         bg = el.get("bgColor")
-        bg = None if bg is None else int(bg)
+        bg = None if bg is None else _int(bg)
         canvas.draw_text(font, x, y, text, fg, bg)
-    elif kind == "fillrect":
-        canvas.fill_rect(x, y, int(el.get("width", 0) or 0), int(el.get("height", 0) or 0),
-                         int(el.get("color", 0) or 0))
-    elif kind == "rect":
-        canvas.draw_rect(x, y, int(el.get("width", 0) or 0), int(el.get("height", 0) or 0),
-                         int(el.get("color", 0) or 0))
+    elif kind in ("rect", "fillrect"):
+        w, h = _wh(el)
+        color = _int(el.get("color"))
+        if kind == "fillrect":
+            canvas.fill_rect(x, y, w, h, color)
+        else:
+            canvas.draw_rect(x, y, w, h, color)
     elif kind == "line":
-        canvas.draw_line(x, y, int(el.get("x1", 0) or 0), int(el.get("y1", 0) or 0),
-                         int(el.get("color", 0) or 0))
+        canvas.draw_line(x, y, _int(el.get("x1")), _int(el.get("y1")),
+                         _int(el.get("color")))
     elif kind == "image":
         b64 = el.get("image") or ""
         if b64:
@@ -571,8 +581,7 @@ def render_element(canvas, el, when=None):
 def element_box(el, when=None):
     """元素在 64x64 上的包围盒 (x0,y0,x1,y1)，用于点选/拖拽。"""
     kind = el.get("type")
-    x = int(el.get("x", 0) or 0)
-    y = int(el.get("y", 0) or 0)
+    x, y = _xy(el)
     if kind in ("text", "datetime"):
         font = get_font(el.get("font"))
         text = element_text(el, when)
@@ -583,10 +592,10 @@ def element_box(el, when=None):
             return (x, y, x + max(2, adv), y + 8)
         return (x + x1, y + y1, x + x1 + w, y + y1 + h)
     if kind in ("rect", "fillrect"):
-        return (x, y, x + int(el.get("width", 0) or 0), y + int(el.get("height", 0) or 0))
+        w, h = _wh(el)
+        return (x, y, x + w, y + h)
     if kind == "line":
-        x1 = int(el.get("x1", 0) or 0)
-        y1 = int(el.get("y1", 0) or 0)
+        x1, y1 = _int(el.get("x1")), _int(el.get("y1"))
         return (min(x, x1), min(y, y1), max(x, x1) + 1, max(y, y1) + 1)
     if kind == "image":
         size = image_size_from_b64(el.get("image") or "")
@@ -902,14 +911,18 @@ def _check_png_compat(raw, tag, add):
     return (w, h)
 
 
-def validate(theme, when=None):
-    """返回 [(level, message)]，level ∈ error/warn/info。"""
+def validate(theme, when=None, size=None):
+    """返回 [(level, message)]，level ∈ error/warn/info。
+
+    size 可由调用方预先算好传入，避免同一轮刷新里重复序列化整份主题。
+    """
     issues = []
 
     def add(level, msg):
         issues.append((level, msg))
 
-    size = theme_bytes(theme)
+    if size is None:
+        size = theme_bytes(theme)
     if size > JSON_DOC_CAPACITY:
         add("error", "JSON %d B 超过固件缓冲区 %d B，设备会解析失败" % (size, JSON_DOC_CAPACITY))
     elif size > JSON_SAFE_BYTES:

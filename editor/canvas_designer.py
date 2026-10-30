@@ -4,7 +4,7 @@
 
 特性：
   * 像素级 WYSIWYG：直接用固件的位图字体渲染，所见即设备所显
-  * 图片压缩：自动缩放 → 调色板量化 → 8-bit RGB PNG，实时显示解码体积（必须 <=4096B；禁止 1/2-bit 索引色）
+  * 图片压缩：自动缩放 → 调色板量化 → 索引色 PNG，实时显示解码体积（必须 <=1024B）
   * 实时校验：JSON 体积上限、元素溢出、图片超限
   * 读写主题 JSON；上传到设备 / 从设备读取
 
@@ -33,28 +33,30 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import cw_core as C  # noqa: E402
+import ui_kit as U  # noqa: E402
+from ui_kit import ColorRow  # noqa: E402
 
 APP_NAME = "ClockWise Canvas 编辑器"
-APP_VER = "1.0"
+APP_VER = "1.1"
 
-# ---- 配色（浅色主题，跟 IDE 一致） ----
-CLR_BG = "#f2f4f7"
-CLR_PANEL = "#ffffff"
-CLR_BORDER = "#dde1e7"
-CLR_TEXT = "#1f2430"
-CLR_MUTED = "#6b7280"
-CLR_ACCENT = "#2f6fed"
-CLR_ACCENT_SOFT = "#e9f0ff"
-CLR_OK = "#12833b"
-CLR_WARN = "#a15c00"
-CLR_ERR = "#c0392b"
-CLR_GRID = "#b9c0cc"
+# 视觉令牌集中在 ui_kit；这里保留别名，业务代码不必关心具体色值。
+CLR_BG = U.BG
+CLR_PANEL = U.SURFACE
+CLR_BORDER = U.BORDER
+CLR_TEXT = U.TEXT
+CLR_MUTED = U.TEXT_MUTED
+CLR_ACCENT = U.ACCENT
+CLR_ACCENT_SOFT = U.ACCENT_SOFT
+CLR_OK = U.OK
+CLR_WARN = U.WARN
+CLR_ERR = U.ERR
+CLR_GRID = U.GRID
 
-FONT_UI = ("Microsoft YaHei UI", 9)
-FONT_UI_B = ("Microsoft YaHei UI", 9, "bold")
-FONT_SMALL = ("Microsoft YaHei UI", 8)
-FONT_MONO = ("Consolas", 9)
-FONT_TITLE = ("Microsoft YaHei UI", 11, "bold")
+FONT_UI = U.FONT_UI
+FONT_UI_B = U.FONT_UI_B
+FONT_SMALL = U.FONT_SMALL
+FONT_MONO = U.FONT_MONO
+FONT_TITLE = U.FONT_TITLE
 
 FONT_LABELS = {
     "big": "big  · 大字 14px",
@@ -66,6 +68,91 @@ FONT_LABELS = {
 FONT_KEYS = list(FONT_LABELS)
 
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".clockwise_canvas_editor.json")
+
+
+# ---------------------------------------------------------------- 动作表
+# 菜单、快捷键、帮助面板、工具栏提示全部由这张表生成：
+#   seq    绑定序列（空表示暂不绑定，仅出现在帮助里）
+#   accel  菜单右侧显示的写法，保持与 seq 一致
+#   scope  "global" 全局；"single" 单键（输入框聚焦时让行）
+ACTIONS = (
+    # ---- 文件 ----
+    {"id": "new", "label": "新建空白主题", "group": "文件", "method": "new_theme",
+     "seq": ("<Control-n>",), "accel": "Ctrl+N", "hint": "清空画布，回到空白主题"},
+    {"id": "open", "label": "打开 JSON…", "group": "文件", "method": "open_file",
+     "seq": ("<Control-o>",), "accel": "Ctrl+O", "hint": "载入本地主题文件"},
+    {"id": "save", "label": "保存", "group": "文件", "method": "save_file",
+     "seq": ("<Control-s>",), "accel": "Ctrl+S", "hint": "写回当前 JSON 文件"},
+    {"id": "save_as", "label": "另存为…", "group": "文件", "method": "save_as",
+     "seq": ("<Control-Shift-s>",), "accel": "Ctrl+Shift+S",
+     "hint": "另存为新的 JSON 文件"},
+    {"id": "export", "label": "导出预览 PNG…", "group": "文件",
+     "method": "export_png", "seq": ("<Control-e>",), "accel": "Ctrl+E",
+     "hint": "把当前画面导出成放大的 PNG"},
+    {"id": "quit", "label": "退出", "group": "文件", "method": "on_close",
+     "seq": ("<Control-q>",), "accel": "Ctrl+Q", "hint": "退出编辑器"},
+
+    # ---- 编辑 ----
+    {"id": "undo", "label": "撤销", "group": "编辑", "method": "do_undo",
+     "seq": ("<Control-z>",), "accel": "Ctrl+Z", "hint": "回退上一步改动"},
+    {"id": "redo", "label": "重做", "group": "编辑", "method": "do_redo",
+     "seq": ("<Control-y>", "<Control-Shift-z>"), "accel": "Ctrl+Y",
+     "hint": "重做刚撤销的改动"},
+    {"id": "duplicate", "label": "复制元素", "group": "编辑", "method": "duplicate",
+     "seq": ("<Control-d>",), "accel": "Ctrl+D", "hint": "原地偏移 2px 复制一份"},
+    {"id": "delete", "label": "删除元素", "group": "编辑", "method": "delete_sel",
+     "seq": ("<Delete>",), "accel": "Del", "scope": "single",
+     "hint": "删除当前选中元素"},
+    {"id": "raise", "label": "上移一层", "group": "编辑", "method": "raise_sel",
+     "seq": ("<Control-Up>",), "accel": "Ctrl+↑", "hint": "在绘制顺序里往前排"},
+    {"id": "lower", "label": "下移一层", "group": "编辑", "method": "lower_sel",
+     "seq": ("<Control-Down>",), "accel": "Ctrl+↓", "hint": "在绘制顺序里往后排"},
+    {"id": "prev", "label": "选中上一个", "group": "编辑", "method": "select_prev",
+     "seq": ("<Control-Shift-Up>",), "accel": "Ctrl+Shift+↑",
+     "hint": "在元素列表里向上切换"},
+    {"id": "next", "label": "选中下一个", "group": "编辑", "method": "select_next",
+     "seq": ("<Control-Shift-Down>",), "accel": "Ctrl+Shift+↓",
+     "hint": "在元素列表里向下切换"},
+    {"id": "deselect", "label": "取消选中", "group": "编辑", "method": "deselect",
+     "seq": ("<Escape>",), "accel": "Esc", "scope": "single",
+     "hint": "清除选中并隐藏选中框"},
+
+    # ---- 视图 ----
+    {"id": "zoom_in", "label": "放大", "group": "视图", "method": "zoom_in",
+     "seq": ("<Control-equal>", "<Control-plus>"), "accel": "Ctrl+=",
+     "hint": "画布放大一级"},
+    {"id": "zoom_out", "label": "缩小", "group": "视图", "method": "zoom_out",
+     "seq": ("<Control-minus>",), "accel": "Ctrl+-", "hint": "画布缩小一级"},
+    {"id": "zoom_fit", "label": "适应窗口", "group": "视图", "method": "zoom_fit",
+     "seq": ("<Control-0>",), "accel": "Ctrl+0", "hint": "恢复自动缩放"},
+    {"id": "grid", "label": "显示网格", "group": "视图", "method": "toggle_grid",
+     "seq": ("<Control-g>",), "accel": "Ctrl+G", "hint": "切换 8px 辅助网格"},
+
+    # ---- 设备 ----
+    {"id": "ping", "label": "连接测试", "group": "设备", "method": "dev_ping",
+     "seq": (), "accel": "", "hint": "请求 /get，确认设备在线"},
+    {"id": "list", "label": "列出设备主题…", "group": "设备", "method": "dev_list",
+     "seq": (), "accel": "", "hint": "读取 /themes 列表"},
+    {"id": "upload", "label": "上传当前主题…", "group": "设备", "method": "dev_upload",
+     "seq": ("<Control-u>", "<Control-Return>"), "accel": "Ctrl+U",
+     "hint": "POST 到设备并可选重启"},
+    {"id": "fetch", "label": "从设备读取主题…", "group": "设备", "method": "dev_fetch",
+     "seq": (), "accel": "", "hint": "把设备上的主题拉回来编辑"},
+    {"id": "restart", "label": "重启设备", "group": "设备", "method": "dev_restart",
+     "seq": (), "accel": "", "hint": "让新主题立即生效"},
+
+    # ---- 帮助 ----
+    {"id": "shortcuts", "label": "快捷键一览", "group": "帮助",
+     "method": "show_shortcuts", "seq": ("<F1>",), "accel": "F1",
+     "hint": "列出全部快捷键"},
+    {"id": "help", "label": "格式速查 / 限制", "group": "帮助", "method": "show_help",
+     "seq": (), "accel": "", "hint": "主题 JSON 格式与固件限制"},
+    {"id": "about", "label": "关于", "group": "帮助", "method": "show_about",
+     "seq": (), "accel": "", "hint": "版本与固件限制摘要"},
+)
+
+ACTION_MAP = {a["id"]: a for a in ACTIONS}
+
 
 
 def _enable_dpi_awareness():
@@ -85,64 +172,7 @@ if os.name == "nt":
 
 
 # ---------------------------------------------------------------- 小部件
-
-class ColorRow(ttk.Frame):
-    """颜色选择行：色块按钮 + HEX/565 输入。"""
-
-    def __init__(self, master, initial=65535, on_change=None, allow_none=False):
-        ttk.Frame.__init__(self, master, style="Panel.TFrame")
-        self.on_change = on_change
-        self.value = int(initial)
-        self.allow_none = allow_none
-
-        self.btn = tk.Button(self, width=4, relief="flat", bd=0, cursor="hand2",
-                             command=self._pick, highlightthickness=1,
-                             highlightbackground=CLR_BORDER)
-        self.btn.pack(side="left")
-        self.var = tk.StringVar()
-        self.entry = ttk.Entry(self, textvariable=self.var, width=6, font=FONT_MONO)
-        self.entry.pack(side="left", padx=(6, 0))
-        self.entry.bind("<Return>", self._typed)
-        self.entry.bind("<FocusOut>", self._typed)
-        self.hint = ttk.Label(self, text="", font=FONT_SMALL, foreground=CLR_MUTED)
-        self.hint.pack(side="left", padx=(6, 0))
-        self.set(self.value)
-
-    def set(self, value):
-        self.value = int(value) & 0xFFFF
-        self.btn.configure(bg=C.rgb565_to_hex(self.value))
-        self.var.set(str(self.value))
-        self.hint.configure(text=C.rgb565_to_hex(self.value))
-        fg = C.rgb565_to_rgb(self.value)
-        if self.btn.winfo_exists():
-            self.btn.configure(activebackground=C.rgb565_to_hex(self.value),
-                               fg="#000000" if sum(fg) > 380 else "#ffffff")
-
-    def _pick(self):
-        rgb = C.rgb565_to_rgb(self.value)
-        picked = colorchooser.askcolor(color=C.rgb_to_hex(rgb), parent=self,
-                                       title="选择颜色")
-        if picked and picked[0]:
-            self.set(C.rgb_to_565(picked[0]))
-            if self.on_change:
-                self.on_change(self.value)
-
-    def _typed(self, _evt=None):
-        text = self.var.get().strip()
-        try:
-            if text.startswith("#"):
-                value = C.hex_to_565(text)
-            else:
-                value = int(text, 0) & 0xFFFF
-        except Exception:
-            self.set(self.value)
-            return
-        if value != self.value:
-            self.set(value)
-            if self.on_change:
-                self.on_change(self.value)
-        else:
-            self.set(self.value)
+# ColorRow 已抽到 ui_kit.py（色块 + 565 输入 + 上下键微调）
 
 
 class CropDialog(tk.Toplevel):
@@ -312,13 +342,15 @@ class CropDialog(tk.Toplevel):
 class ImageDialog(tk.Toplevel):
     """图片导入：裁剪 + 缩放 + 调色板量化 + 多方案选择 + 体积实时反馈。"""
 
-    def __init__(self, master, src_path=None, bg_rgb=(0, 0, 0), on_ok=None):
+    def __init__(self, master, src_path=None, bg_rgb=(0, 0, 0), on_ok=None,
+                 fixed_size=None):
         tk.Toplevel.__init__(self, master)
-        self.title("导入图片（自动压进 4096 字节，8-bit RGB）")
+        self.title("导入图片（自动压进 1024 字节）")
         self.configure(bg=CLR_BG)
-        self.resizable(False, False)
+        self.resizable(False, True)
         self.transient(master)
         self.on_ok = on_ok
+        self.fixed_size = fixed_size      # 加帧时锁定为组内首帧尺寸
         self.result = None
         self.src = None
         self._job = None
@@ -344,11 +376,37 @@ class ImageDialog(tk.Toplevel):
         else:
             self._update()
         self.minsize(470, 0)
+        self._fit_screen()
+        # 缩略图是异步生成的，等内容就绪后再校一次尺寸
+        self.after(180, self._fit_screen)
         self.grab_set()
+
+    def _fit_screen(self):
+        """按屏幕可用高度收口：窗口再矮，底部按钮也留在可视区内。"""
+        if not self.winfo_exists():
+            return
+        self.update_idletasks()
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        w = max(470, self.winfo_reqwidth())
+        h = min(max(self.winfo_reqheight(), 520), int(sh * 0.86))
+        x = max(0, (sw - w) // 2)
+        y = max(0, (sh - h) // 2 - 20)
+        self.geometry("%dx%d+%d+%d" % (w, h, x, y))
 
     # ---------- UI ----------
     def _build(self):
-        pad = {"padx": 10, "pady": 4}
+        # 底部按钮区先 pack：窗口被屏幕高度压缩时，按钮永远不会被挤出可视区
+        btns = ttk.Frame(self, padding=(12, 0, 12, 12))
+        btns.pack(side="bottom", fill="x")
+        self.auto_btn = ttk.Button(btns, text="自动压到 1024B 以内",
+                                   style="Ghost.TButton", command=self._auto)
+        self.auto_btn.pack(side="left")
+        ttk.Button(btns, text="取消", style="Ghost.TButton",
+                   command=self.destroy).pack(side="right")
+        self.ok_btn = ttk.Button(btns, text="确定", style="Accent.TButton",
+                                 command=self._ok)
+        self.ok_btn.pack(side="right", padx=8)
+
         box = ttk.Frame(self, padding=12)
         box.pack(fill="both", expand=True)
 
@@ -361,6 +419,10 @@ class ImageDialog(tk.Toplevel):
         self.crop_state.pack(side="left", padx=6)
         ttk.Label(row, textvariable=self.path_var, font=FONT_SMALL,
                   foreground=CLR_MUTED).pack(side="left", padx=8)
+        if self.fixed_size:
+            ttk.Label(box, text="尺寸锁定为 %dx%d（与组内首帧一致）：需要别的尺寸请新建精灵组。"
+                               % (self.fixed_size[0], self.fixed_size[1]),
+                      style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
 
         prev = ttk.Frame(box)
         prev.pack(fill="x", pady=(10, 6))
@@ -379,29 +441,42 @@ class ImageDialog(tk.Toplevel):
         for col, minsize in ((0, 52), (1, 56), (2, 52), (3, 56), (4, 44), (5, 60)):
             g.columnconfigure(col, minsize=minsize)
         ttk.Label(g, text="最大宽", font=FONT_UI).grid(row=0, column=0, sticky="w")
-        ttk.Spinbox(g, from_=4, to=64, width=5, textvariable=self.maxw_var,
-                    command=self._schedule).grid(row=0, column=1, sticky="w", padx=(4, 12))
+        sp_w = ttk.Spinbox(g, from_=4, to=64, width=5, textvariable=self.maxw_var,
+                           command=self._schedule)
+        sp_w.grid(row=0, column=1, sticky="w", padx=(4, 12))
         ttk.Label(g, text="最大高", font=FONT_UI).grid(row=0, column=2, sticky="w")
-        ttk.Spinbox(g, from_=4, to=64, width=5, textvariable=self.maxh_var,
-                    command=self._schedule).grid(row=0, column=3, sticky="w", padx=(4, 12))
+        sp_h = ttk.Spinbox(g, from_=4, to=64, width=5, textvariable=self.maxh_var,
+                           command=self._schedule)
+        sp_h.grid(row=0, column=3, sticky="w", padx=(4, 12))
+        # 手输数字不点箭头时也要重算，否则按钮状态会停留在上一次结果
+        for sp in (sp_w, sp_h):
+            sp.bind("<Return>", lambda e: self._update())
+            sp.bind("<FocusOut>", lambda e: self._update())
+        if self.fixed_size:
+            for sp in (sp_w, sp_h):
+                sp.configure(state="disabled")
         ttk.Label(g, text="色数", font=FONT_UI).grid(row=0, column=4, sticky="w")
         cb = ttk.Combobox(g, values=("2", "4", "8", "16", "32"), width=4,
                           textvariable=self.colors_var, state="readonly")
         cb.grid(row=0, column=5, sticky="w", padx=(4, 0))
         cb.bind("<<ComboboxSelected>>", lambda e: self._schedule())
 
-        ttk.Checkbutton(g, text="抖动（体积更大）", variable=self.dither_var,
-                        command=self._schedule).grid(row=1, column=0, columnspan=3,
-                                                     sticky="w", pady=(8, 0))
-        ttk.Checkbutton(g, text="平滑缩放", variable=self.smooth_var,
-                        command=self._schedule).grid(row=1, column=3, columnspan=3,
-                                                     sticky="w", pady=(8, 0))
+        U.Toggle(g, "抖动（体积更大）", self.dither_var, self._schedule,
+                 bg=CLR_BG).grid(row=1, column=0, columnspan=3, sticky="w",
+                                 pady=(8, 0))
+        U.Toggle(g, "平滑缩放", self.smooth_var, self._schedule,
+                 bg=CLR_BG).grid(row=1, column=3, columnspan=3, sticky="w",
+                                 pady=(8, 0))
 
         ttk.Label(g, text="适配", font=FONT_UI).grid(row=2, column=0, sticky="w", pady=(8, 0))
         mb = ttk.Combobox(g, values=("等比缩小（不放大）", "等比放大填满", "裁切填满", "拉伸"),
                           width=15, textvariable=self.mode_var, state="readonly")
         mb.grid(row=2, column=1, columnspan=3, sticky="w", padx=(4, 0), pady=(8, 0))
         mb.bind("<<ComboboxSelected>>", lambda e: self._schedule())
+        if self.fixed_size:
+            # 尺寸被锁死时只能拉伸，才能保证每一帧的 w×h 完全一致
+            self.mode_var.set("拉伸")
+            mb.configure(state="disabled")
         ttk.Label(g, text="透明→", font=FONT_UI).grid(row=2, column=4, sticky="w", pady=(8, 0))
         cell = ttk.Frame(g)
         cell.grid(row=2, column=5, sticky="w", pady=(8, 0))
@@ -424,13 +499,6 @@ class ImageDialog(tk.Toplevel):
         opt_frame = ttk.LabelFrame(box, text=" 多方案选择（点一个直接用） ", padding=8)
         opt_frame.pack(fill="x", pady=(8, 0))
         self._options_host = opt_frame
-
-        btns = ttk.Frame(box)
-        btns.pack(fill="x", pady=(8, 0))
-        ttk.Button(btns, text="自动压到 4096B 以内", command=self._auto).pack(side="left")
-        ttk.Button(btns, text="取消", command=self.destroy).pack(side="right")
-        self.ok_btn = ttk.Button(btns, text="确定", command=self._ok)
-        self.ok_btn.pack(side="right", padx=6)
 
     def _paint_bg(self):
         hx = C.rgb_to_hex(self.bg)
@@ -470,9 +538,18 @@ class ImageDialog(tk.Toplevel):
         self._orig_ref = ImageTk.PhotoImage(thumb)
         self.orig_lbl.configure(image=self._orig_ref, text="", width=150, height=150)
         big = max(img.size)
-        guess = 32 if big > 32 else max(4, big)
-        self.maxw_var.set(min(guess, 64))
-        self.maxh_var.set(min(guess, 64))
+        if self.fixed_size:
+            # 精灵组尺寸由第一帧决定，新帧必须跟着它，否则设备上会错位
+            fw, fh = int(self.fixed_size[0]), int(self.fixed_size[1])
+            self.maxw_var.set(max(1, min(64, fw)))
+            self.maxh_var.set(max(1, min(64, fh)))
+            self.path_var.set("%s  (%dx%d)  ·  锁定 %dx%d" % (
+                os.path.basename(path), img.size[0], img.size[1], fw, fh))
+        else:
+            guess = 32 if big > 32 else max(4, big)
+            self.maxw_var.set(min(guess, 64))
+            self.maxh_var.set(min(guess, 64))
+        self.size_lbl.configure(text="正在压缩…", foreground=CLR_MUTED)
         self._schedule()
 
     def _work_image(self):
@@ -533,10 +610,16 @@ class ImageDialog(tk.Toplevel):
 
     def _update(self):
         self._job = None
+        if not self.winfo_exists():
+            return
         if self.src is None:
             self.size_lbl.configure(text="请先选择图片", foreground=CLR_MUTED)
-            self.detail_lbl.configure(text="")
+            self.detail_lbl.configure(
+                text="支持 PNG / JPG / BMP / WEBP，会自动压成索引色 PNG。",
+                foreground=CLR_MUTED)
             self.ok_btn.state(["disabled"])
+            self.ok_btn.configure(text="确定")
+            self.auto_btn.configure(style="Ghost.TButton")
             self._clear_options()
             return
         p = self._params()
@@ -549,12 +632,21 @@ class ImageDialog(tk.Toplevel):
         self.size_lbl.configure(
             text="%dx%d · %d 色 · PNG %d B  (%s)" % (
                 res.width, res.height, res.colors, res.size,
-                "可放进设备" if ok else "超出 4096B"),
+                "可放进设备" if ok else "超出 1024B"),
             foreground=CLR_OK if ok else CLR_ERR)
-        self.detail_lbl.configure(
-            text="base64 %d 字符（固件解码缓冲 4096B）· 阈值 %d B"
-                 % (len(res.b64), C.IMAGE_DECODE_LIMIT))
+        if ok:
+            self.detail_lbl.configure(
+                text="base64 %d 字符（固件解码缓冲 1024B）" % len(res.b64),
+                foreground=CLR_MUTED)
+        else:
+            self.detail_lbl.configure(
+                text="超出 %d B：调小最大宽高或色数，或点左下角「自动压到 1024B 以内」"
+                     % (res.size - C.IMAGE_DECODE_LIMIT),
+                foreground=CLR_ERR)
+        # 禁用时必须让按钮看起来就是禁用；同时把出路做成主按钮
         self.ok_btn.state([] if ok else ["disabled"])
+        self.ok_btn.configure(text="确定" if ok else "超出 1024B")
+        self.auto_btn.configure(style="Ghost.TButton" if ok else "Accent.TButton")
         view = res.image(scale=1)
         scale = max(1, min(8, 160 // max(view.width, view.height)))
         view = view.resize((view.width * scale, view.height * scale), Image.NEAREST)
@@ -576,11 +668,15 @@ class ImageDialog(tk.Toplevel):
                                    max_w=min(self.maxw_var.get(), 64),
                                    max_h=min(self.maxh_var.get(), 64),
                                    mode=self._params()["mode"])
+        if self.fixed_size:
+            # 锁定尺寸时只保留同尺寸方案，避免点一个 8x8 就把帧改小
+            target = (int(self.fixed_size[0]), int(self.fixed_size[1]))
+            opts = [o for o in opts if o["size"] == target]
         self._options = opts
-        # 只展示前 10 个（按体积从大到小，即观感从好到差），且都 <=4096
+        # 只展示前 10 个（按体积从大到小，即观感从好到差），且都 <=1024
         shown = [o for o in opts if o["ok"]][:10]
         if not shown:
-            ttk.Label(self._options_host, text="没有 <=4096B 的方案，请裁剪或降低要求。",
+            ttk.Label(self._options_host, text="没有 <=1024B 的方案，请裁剪或降低要求。",
                       style="Muted.TLabel").pack(anchor="w")
             return
         row_frame = None
@@ -607,8 +703,9 @@ class ImageDialog(tk.Toplevel):
 
     def _pick_option(self, o):
         self.colors_var.set(str(o["colors"]))
-        self.maxw_var.set(o["size"][0])
-        self.maxh_var.set(o["size"][1])
+        if not self.fixed_size:
+            self.maxw_var.set(o["size"][0])
+            self.maxh_var.set(o["size"][1])
         self.result = o["result"]
         self._update()
 
@@ -617,17 +714,37 @@ class ImageDialog(tk.Toplevel):
             return
         work = self._work_image()
         p = self._params()
-        res = C.auto_fit_image(work, limit=C.IMAGE_DECODE_LIMIT,
-                               max_w=p["max_w"], max_h=p["max_h"], bg=p["bg"],
-                               mode=p["mode"], smooth=p["smooth"], dither=p["dither"])
-        if res is None:
-            messagebox.showwarning("放不下",
-                                   "即使缩到 8px / 2 色也超过 4096 字节，请换更简单的小图。",
-                                   parent=self)
-            return
-        self.colors_var.set(str(res.colors))
-        self.maxw_var.set(res.width)
-        self.maxh_var.set(res.height)
+        if self.fixed_size:
+            # 尺寸锁定时只能靠降色数达标，不能改宽高
+            fw, fh = int(self.fixed_size[0]), int(self.fixed_size[1])
+            res = None
+            for colors in (16, 8, 4, 2):
+                res = C.prepare_image(work, fw, fh, colors, dither=p["dither"],
+                                      bg=p["bg"], mode="stretch",
+                                      smooth=p["smooth"])
+                if res.ok:
+                    break
+            if res is None or not res.ok:
+                messagebox.showwarning(
+                    "放不下",
+                    "尺寸锁定为 %dx%d 时，即使 2 色也超过 1024 字节。\n"
+                    "请换更简单的图，或新建一个更小的精灵组。" % (fw, fh),
+                    parent=self)
+                return
+            self.colors_var.set(str(res.colors))
+        else:
+            res = C.auto_fit_image(work, limit=C.IMAGE_DECODE_LIMIT,
+                                   max_w=p["max_w"], max_h=p["max_h"], bg=p["bg"],
+                                   mode=p["mode"], smooth=p["smooth"],
+                                   dither=p["dither"])
+            if res is None:
+                messagebox.showwarning("放不下",
+                                       "即使缩到 8px / 2 色也超过 1024 字节，请换更简单的小图。",
+                                       parent=self)
+                return
+            self.colors_var.set(str(res.colors))
+            self.maxw_var.set(res.width)
+            self.maxh_var.set(res.height)
         self._update()
 
     def _ok(self):
@@ -639,6 +756,99 @@ class ImageDialog(tk.Toplevel):
 
 
 # ---------------------------------------------------------------- 主窗口
+
+class _PropForm(object):
+    """属性面板的行构建器。
+
+    把「左标签 / 右控件」的两列网格、变量注册、分区标题收在一处；
+    各元素类型的属性表只描述字段，不再重复排版代码。
+    """
+
+    def __init__(self, owner, host):
+        self.owner = owner
+        self.host = host
+        self.row = 0
+        host.columnconfigure(1, weight=1)
+
+    def section(self, text):
+        if self.row:
+            tk.Frame(self.host, bg=U.BORDER, height=1).grid(
+                row=self.row, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+            self.row += 1
+        U.section(self.host, text).grid(
+            row=self.row, column=0, columnspan=2, sticky="ew", pady=(8, 4))
+        self.row += 1
+
+    def label(self, text):
+        ttk.Label(self.host, text=text, style="Panel.TLabel").grid(
+            row=self.row, column=0, sticky="w", pady=3, padx=(0, 8))
+
+    def num(self, el, key, text, lo=-64, hi=127, width=8, setter=None,
+            register=True, commit=False, on_change=None):
+        self.label(text)
+        var = tk.IntVar(value=int(el.get(key, 0) or 0))
+        apply = setter or self.owner._set_num
+
+        def do_apply(_evt=None):
+            apply(key, var)
+            if on_change:
+                on_change()
+
+        box = ttk.Spinbox(self.host, from_=lo, to=hi, width=width,
+                          textvariable=var, command=do_apply)
+        box.grid(row=self.row, column=1, sticky="w", pady=3)
+        if commit:
+            # 提交式：回车/失焦/箭头时落盘，避免逐位输入触发
+            box.bind("<Return>", do_apply)
+            box.bind("<FocusOut>", do_apply)
+        else:
+            var.trace_add("write", lambda *a: apply(key, var))
+        if register:
+            self.owner._prop_vars[key] = var
+        self.row += 1
+        return var
+
+    def text(self, el, key, text):
+        self.label(text)
+        var = tk.StringVar(value=el.get(key, ""))
+        ttk.Entry(self.host, textvariable=var).grid(
+            row=self.row, column=1, sticky="ew", pady=3)
+        var.trace_add("write", lambda *a: self.owner._set_text(key, var))
+        self.owner._prop_text_vars[key] = var
+        self.row += 1
+        return var
+
+    def color(self, el, key, text, default=65535, register=True):
+        self.label(text)
+        row = ColorRow(self.host, el.get(key, default),
+                       on_change=lambda v: self.owner._set_color(key, v))
+        row.grid(row=self.row, column=1, sticky="w", pady=3)
+        if register:
+            self.owner._prop_colors[key] = row
+        self.row += 1
+        return row
+
+    def buttons(self, specs, pady=(9, 2)):
+        box = tk.Frame(self.host, bg=U.SURFACE)
+        box.grid(row=self.row, column=0, columnspan=2, sticky="ew", pady=pady)
+        for text, cmd in specs:
+            ttk.Button(box, text=text, style="Small.TButton",
+                       command=cmd).pack(side="left", padx=(0, 6))
+        self.row += 1
+        return box
+
+    def note(self, text, pady=(6, 0)):
+        lab = ttk.Label(self.host, text=text, style="Muted.TLabel",
+                        justify="left", wraplength=290)
+        lab.grid(row=self.row, column=0, columnspan=2, sticky="w", pady=pady)
+        self.row += 1
+        return lab
+
+    def wide(self, widget, pady=(0, 0)):
+        widget.grid(row=self.row, column=0, columnspan=2, sticky="ew", pady=pady)
+        self.row += 1
+        return widget
+
 
 class Designer(tk.Tk):
 
@@ -668,6 +878,7 @@ class Designer(tk.Tk):
         self._photo = None
         self._anim_t0 = 0.0
         self._frame_refs = []
+        self._props_sig = None
         self._props_mode = None   # 属性面板当前显示：None / "element" / "loop"
         self._props_loop_li = None  # loop 模式下对应的 loop 索引
         self._cfg = self._load_cfg()
@@ -700,63 +911,27 @@ class Designer(tk.Tk):
             pass
 
     def _init_style(self):
-        st = ttk.Style(self)
-        try:
-            st.theme_use("clam")
-        except Exception:
-            pass
-        st.configure(".", background=CLR_BG, foreground=CLR_TEXT, font=FONT_UI)
-        st.configure("TFrame", background=CLR_BG)
-        st.configure("Panel.TFrame", background=CLR_PANEL)
-        st.configure("TLabel", background=CLR_BG, foreground=CLR_TEXT, font=FONT_UI)
-        st.configure("Panel.TLabel", background=CLR_PANEL)
-        st.configure("Muted.TLabel", background=CLR_PANEL, foreground=CLR_MUTED,
-                     font=FONT_SMALL)
-        st.configure("Head.TLabel", background=CLR_PANEL, foreground=CLR_TEXT,
-                     font=FONT_UI_B)
-        st.configure("Title.TLabel", background=CLR_PANEL, foreground=CLR_TEXT,
-                     font=FONT_TITLE)
-        st.configure("TLabelframe", background=CLR_PANEL, bordercolor=CLR_BORDER,
-                     relief="solid", borderwidth=1)
-        st.configure("TLabelframe.Label", background=CLR_PANEL, foreground=CLR_MUTED,
-                     font=FONT_UI_B)
-        st.configure("TButton", padding=(9, 4), background="#f7f8fa",
-                     bordercolor=CLR_BORDER, focusthickness=0, relief="flat")
-        st.map("TButton",
-               background=[("active", CLR_ACCENT_SOFT), ("pressed", "#d7e3ff")],
-               foreground=[("active", CLR_ACCENT)])
-        st.configure("Accent.TButton", background=CLR_ACCENT, foreground="#ffffff",
-                     padding=(12, 5))
-        st.map("Accent.TButton",
-               background=[("active", "#1f5fdd"), ("pressed", "#1a52c4")],
-               foreground=[("active", "#ffffff")])
-        st.configure("Small.TButton", padding=(5, 3), background="#f7f8fa",
-                     bordercolor=CLR_BORDER)
-        st.map("Small.TButton",
-               background=[("active", CLR_ACCENT_SOFT)],
-               foreground=[("active", CLR_ACCENT)])
-        st.configure("TCheckbutton", background=CLR_PANEL, font=FONT_UI)
-        st.configure("Tool.TCheckbutton", background="#f7f8fa", font=FONT_UI)
-        st.configure("TEntry", fieldbackground="#ffffff", bordercolor=CLR_BORDER,
-                     insertcolor=CLR_TEXT, padding=3)
-        st.configure("TSpinbox", fieldbackground="#ffffff", bordercolor=CLR_BORDER,
-                     arrowsize=11, padding=2)
-        st.configure("TCombobox", fieldbackground="#ffffff", bordercolor=CLR_BORDER,
-                     padding=3)
-        st.configure("Treeview", background="#ffffff", fieldbackground="#ffffff",
-                     bordercolor=CLR_BORDER, rowheight=23, font=FONT_UI)
-        st.configure("Treeview.Heading", background="#f1f3f7", foreground=CLR_MUTED,
-                     relief="flat", font=FONT_SMALL)
-        st.map("Treeview", background=[("selected", CLR_ACCENT)],
-               foreground=[("selected", "#ffffff")])
-        st.configure("TProgressbar", background=CLR_ACCENT, troughcolor="#e5e8ee",
-                     bordercolor=CLR_BORDER, thickness=8)
+        """全部 ttk 样式集中在 ui_kit.install_styles，这里只装表。"""
+        self.style = U.install_styles(self)
+
+    def _menu_item(self, menu, aid, **kw):
+        """菜单项从动作表取 label / accelerator，避免和快捷键两处不一致。"""
+        act = ACTION_MAP[aid]
+        opts = {"label": act["label"], "command": getattr(self, act["method"])}
+        if act.get("accel"):
+            opts["accelerator"] = act["accel"]
+        opts.update(kw)
+        menu.add_command(**opts)
 
     def _build_menu(self):
-        m = tk.Menu(self)
-        fm = tk.Menu(m, tearoff=0)
-        fm.add_command(label="新建空白主题", accelerator="Ctrl+N", command=self.new_theme)
-        tpl = tk.Menu(fm, tearoff=0)
+        opts = dict(bg=U.SURFACE, fg=U.TEXT, activebackground=U.ACCENT_SOFT,
+                    activeforeground=U.ACCENT, bd=0, relief="flat",
+                    activeborderwidth=0, font=FONT_UI)
+        bar = tk.Menu(self, **opts)
+
+        fm = tk.Menu(bar, tearoff=0, **opts)
+        self._menu_item(fm, "new")
+        tpl = tk.Menu(fm, tearoff=0, **opts)
         for label, key in (("极简（边框+分隔线）", "minimal"),
                            ("居中大字 + 日期", "bigcenter"),
                            ("纯文字问候", "hello"),
@@ -764,97 +939,140 @@ class Designer(tk.Tk):
             tpl.add_command(label=label, command=lambda k=key: self.load_template(k))
         fm.add_cascade(label="从模板新建", menu=tpl)
         fm.add_separator()
-        fm.add_command(label="打开 JSON…", accelerator="Ctrl+O", command=self.open_file)
-        fm.add_command(label="保存", accelerator="Ctrl+S", command=self.save_file)
-        fm.add_command(label="另存为…", accelerator="Ctrl+Shift+S", command=self.save_as)
+        for aid in ("open", "save", "save_as"):
+            self._menu_item(fm, aid)
         fm.add_separator()
-        fm.add_command(label="导出 64x64 预览 PNG…", command=self.export_png)
+        self._menu_item(fm, "export")
         fm.add_separator()
-        fm.add_command(label="退出", command=self.on_close)
-        m.add_cascade(label="文件", menu=fm)
+        self._menu_item(fm, "quit")
+        bar.add_cascade(label="文件", menu=fm)
 
-        em = tk.Menu(m, tearoff=0)
-        em.add_command(label="撤销", accelerator="Ctrl+Z", command=self.do_undo)
-        em.add_command(label="重做", accelerator="Ctrl+Y", command=self.do_redo)
-        em.add_separator()
-        em.add_command(label="复制元素", accelerator="Ctrl+D", command=self.duplicate)
-        em.add_command(label="删除元素", accelerator="Del", command=self.delete_sel)
-        em.add_separator()
-        em.add_command(label="上移一层", accelerator="Ctrl+Up", command=lambda: self.move(-1))
-        em.add_command(label="下移一层", accelerator="Ctrl+Down", command=lambda: self.move(1))
-        m.add_cascade(label="编辑", menu=em)
+        em = tk.Menu(bar, tearoff=0, **opts)
+        for aid in ("undo", "redo", None, "duplicate", "delete", None,
+                    "raise", "lower", None, "prev", "next", "deselect"):
+            if aid:
+                self._menu_item(em, aid)
+            else:
+                em.add_separator()
+        bar.add_cascade(label="编辑", menu=em)
 
-        dm = tk.Menu(m, tearoff=0)
-        dm.add_command(label="连接测试（/get）", command=self.dev_ping)
-        dm.add_command(label="列出设备主题（/themes）", command=self.dev_list)
-        dm.add_command(label="上传当前主题…", accelerator="Ctrl+U", command=self.dev_upload)
-        dm.add_command(label="从设备读取主题…", command=self.dev_fetch)
-        dm.add_separator()
-        dm.add_command(label="重启设备", command=self.dev_restart)
-        m.add_cascade(label="设备", menu=dm)
+        vm = tk.Menu(bar, tearoff=0, **opts)
+        for aid in ("zoom_in", "zoom_out", "zoom_fit", None, "grid"):
+            if aid:
+                self._menu_item(vm, aid)
+            else:
+                vm.add_separator()
+        bar.add_cascade(label="视图", menu=vm)
 
-        hm = tk.Menu(m, tearoff=0)
-        hm.add_command(label="格式速查 / 限制", command=self.show_help)
-        hm.add_command(label="关于", command=lambda: messagebox.showinfo(
-            "关于", "%s %s\n\n64x64 Canvas 主题编辑器\n"
-                    "字体与色彩取自固件实现，预览与设备一致。\n"
-                    "固件限制：JSON <= 16KB，单图 PNG <= 4096B 且宽/高 <= 64px。"
-                    % (APP_NAME, APP_VER), parent=self))
-        m.add_cascade(label="帮助", menu=hm)
-        self.config(menu=m)
+        dm = tk.Menu(bar, tearoff=0, **opts)
+        for aid in ("ping", "list", "upload", "fetch", None, "restart"):
+            if aid:
+                self._menu_item(dm, aid)
+            else:
+                dm.add_separator()
+        bar.add_cascade(label="设备", menu=dm)
+
+        hm = tk.Menu(bar, tearoff=0, **opts)
+        for aid in ("shortcuts", "help", None, "about"):
+            if aid:
+                self._menu_item(hm, aid)
+            else:
+                hm.add_separator()
+        bar.add_cascade(label="帮助", menu=hm)
+
+        self.config(menu=bar)
 
     def _build_toolbar(self):
-        bar = tk.Frame(self, bg="#f7f8fa", highlightbackground=CLR_BORDER,
-                       highlightthickness=1)
+        bar = tk.Frame(self, bg=U.SURFACE)
         bar.pack(side="top", fill="x")
-        inner = tk.Frame(bar, bg="#f7f8fa")
-        inner.pack(fill="x", padx=10, pady=6)
+        inner = tk.Frame(bar, bg=U.SURFACE)
+        inner.pack(fill="x", padx=14, pady=(8, 7))
 
-        ttk.Button(inner, text="打开", command=self.open_file).pack(side="left")
-        ttk.Button(inner, text="保存", command=self.save_file).pack(side="left", padx=(6, 0))
-        ttk.Separator(inner, orient="vertical").pack(side="left", fill="y", padx=10)
-        ttk.Button(inner, text="撤销", command=self.do_undo, width=5).pack(side="left")
-        ttk.Button(inner, text="重做", command=self.do_redo, width=5).pack(side="left", padx=(6, 0))
-        ttk.Separator(inner, orient="vertical").pack(side="left", fill="y", padx=10)
-        ttk.Label(inner, text="缩放", font=FONT_UI).pack(side="left")
-        ttk.Button(inner, text="−", width=3, command=lambda: self.set_zoom(-1)).pack(side="left", padx=3)
-        self.zoom_lbl = ttk.Label(inner, text="8x", width=4, font=FONT_UI_B)
-        self.zoom_lbl.pack(side="left")
-        ttk.Button(inner, text="+", width=3, command=lambda: self.set_zoom(1)).pack(side="left")
-        ttk.Checkbutton(inner, text="网格", variable=self.grid_var, style="Tool.TCheckbutton",
-                        command=self.redraw).pack(side="left", padx=10)
-        ttk.Separator(inner, orient="vertical").pack(side="left", fill="y", padx=10)
+        def group():
+            g = tk.Frame(inner, bg=U.SURFACE)
+            g.pack(side="left", padx=(0, 12))
+            return g
 
-        ttk.Label(inner, text="设备 IP", font=FONT_UI).pack(side="left")
-        ttk.Entry(inner, textvariable=self.ip_var, width=16, font=FONT_MONO).pack(side="left", padx=4)
-        ttk.Button(inner, text="测试", width=5, command=self.dev_ping).pack(side="left")
-        ttk.Button(inner, text="上传", width=5, command=self.dev_upload).pack(side="left", padx=(4, 0))
-        ttk.Button(inner, text="读取", width=5, command=self.dev_fetch).pack(side="left", padx=(4, 0))
+        def divider():
+            tk.Frame(inner, bg=U.BORDER, width=1, height=22, bd=0).pack(
+                side="left", padx=(0, 12))
 
-        right = tk.Frame(inner, bg="#f7f8fa")
+        g = group()
+        ttk.Button(g, text="打开", style="Ghost.TButton",
+                   command=self.open_file).pack(side="left")
+        ttk.Button(g, text="保存", style="Accent.TButton",
+                   command=self.save_file).pack(side="left", padx=(6, 0))
+        divider()
+
+        g = group()
+        ttk.Button(g, text="撤销", style="Ghost.TButton", width=5,
+                   command=self.do_undo).pack(side="left")
+        ttk.Button(g, text="重做", style="Ghost.TButton", width=5,
+                   command=self.do_redo).pack(side="left", padx=(6, 0))
+        divider()
+
+        g = group()
+        ttk.Label(g, text="缩放", style="Panel.TLabel").pack(side="left", padx=(0, 6))
+        ttk.Button(g, text="−", style="Small.TButton", width=3,
+                   command=lambda: self.set_zoom(-1)).pack(side="left")
+        self.zoom_lbl = ttk.Label(g, text="8x", width=3, style="Head.TLabel",
+                                  anchor="center")
+        self.zoom_lbl.pack(side="left", padx=2)
+        ttk.Button(g, text="+", style="Small.TButton", width=3,
+                   command=lambda: self.set_zoom(1)).pack(side="left")
+        self.grid_toggle = U.Toggle(g, "网格", self.grid_var, self.redraw)
+        self.grid_toggle.pack(side="left", padx=(12, 0), pady=1)
+        divider()
+
+        g = group()
+        ttk.Label(g, text="设备", style="Panel.TLabel").pack(side="left", padx=(0, 6))
+        ttk.Entry(g, textvariable=self.ip_var, width=15,
+                  font=FONT_MONO).pack(side="left")
+        ttk.Button(g, text="测试", style="Small.TButton", width=5,
+                   command=self.dev_ping).pack(side="left", padx=(6, 0))
+        ttk.Button(g, text="上传", style="Small.TButton", width=5,
+                   command=self.dev_upload).pack(side="left", padx=(4, 0))
+        ttk.Button(g, text="读取", style="Small.TButton", width=5,
+                   command=self.dev_fetch).pack(side="left", padx=(4, 0))
+
+        right = tk.Frame(inner, bg=U.SURFACE)
         right.pack(side="right")
-        ttk.Button(right, text="导出 预览", command=self.export_png).pack(side="right")
+        ttk.Button(right, text="导出预览", style="Ghost.TButton",
+                   command=self.export_png).pack(side="right")
+
+        tk.Frame(bar, bg=U.BORDER, height=1, bd=0).pack(fill="x")
 
     def _build_body(self):
         body = tk.Frame(self, bg=CLR_BG)
-        body.pack(side="top", fill="both", expand=True, padx=10, pady=(8, 4))
+        body.pack(side="top", fill="both", expand=True, padx=12, pady=(10, 6))
         body.grid_rowconfigure(0, weight=1)
-        body.grid_columnconfigure(0, minsize=262, weight=0)
+        body.grid_columnconfigure(0, minsize=268, weight=0)
         body.grid_columnconfigure(1, weight=1)
-        body.grid_columnconfigure(2, minsize=320, weight=0)
+        body.grid_columnconfigure(2, minsize=326, weight=0)
+        self._build_left_panel(body)
+        self._build_center_panel(body)
+        self._build_right_panel(body)
 
-        # 左：主题 + 元素
-        left = tk.Frame(body, bg=CLR_PANEL, width=262, highlightbackground=CLR_BORDER,
-                        highlightthickness=1)
-        left.grid(row=0, column=0, sticky="nsw")
-        # 注意：子控件是 pack 的，所以必须用 pack_propagate 才能锁住 262px 宽度
-        left.pack_propagate(False)
+    def _panel(self, body, column, width, sticky):
+        """三栏共用的卡片：白底 + 1px 描边 + 固定宽度。"""
+        outer = tk.Frame(body, bg=CLR_PANEL, width=width,
+                         highlightbackground=CLR_BORDER, highlightthickness=1)
+        outer.grid(row=0, column=column, sticky=sticky)
+        # 子控件是 pack 的，必须用它才能锁住宽度
+        outer.pack_propagate(False)
+        return outer
 
-        th = ttk.Frame(left, style="Panel.TFrame", padding=(12, 10, 12, 4))
-        th.pack(fill="x")
-        ttk.Label(th, text="主题", style="Title.TLabel").pack(anchor="w")
-        form = ttk.Frame(left, style="Panel.TFrame", padding=(12, 2, 12, 8))
-        form.pack(fill="x")
+    def _build_left_panel(self, body):
+        left = self._panel(body, 0, 268, "nsw")
+
+        head = tk.Frame(left, bg=CLR_PANEL)
+        head.pack(fill="x", padx=14, pady=(12, 0))
+        ttk.Label(head, text="主题", style="Title.TLabel").pack(side="left")
+        ttk.Label(head, text="CANVAS JSON", style="Tiny.TLabel").pack(
+            side="right", pady=(5, 0))
+
+        form = tk.Frame(left, bg=CLR_PANEL)
+        form.pack(fill="x", padx=14, pady=(8, 10))
         form.columnconfigure(1, weight=1)
         self.name_var = tk.StringVar()
         self.author_var = tk.StringVar()
@@ -874,30 +1092,32 @@ class Designer(tk.Tk):
         self.ver_var.trace_add("write", lambda *a: self._theme_field("version", self.ver_var))
         self.delay_var.trace_add("write", lambda *a: self._theme_field("delay", self.delay_var))
 
-        ttk.Separator(left, orient="horizontal").pack(fill="x", padx=12, pady=(2, 8))
+        tk.Frame(left, bg=CLR_BORDER, height=1, bd=0).pack(fill="x")
 
-        # 左栏下半：标签页（元素 / 精灵动画）
         nb = ttk.Notebook(left)
-        nb.pack(fill="both", expand=True, padx=8)
+        nb.pack(fill="both", expand=True, padx=10, pady=(8, 8))
+        self.nb = nb
 
         # —— 元素页 ——
-        elem_tab = ttk.Frame(nb, style="Panel.TFrame")
+        elem_tab = tk.Frame(nb, bg=CLR_PANEL)
         nb.add(elem_tab, text="元素")
 
-        eh = ttk.Frame(elem_tab, style="Panel.TFrame", padding=(6, 6, 6, 4))
-        eh.pack(fill="x")
-        ttk.Label(eh, text="元素（从下往上绘制）", style="Head.TLabel").pack(side="left")
+        eh = tk.Frame(elem_tab, bg=CLR_PANEL)
+        eh.pack(fill="x", padx=2, pady=(6, 4))
+        ttk.Label(eh, text="元素", style="Head.TLabel").pack(side="left")
+        ttk.Label(eh, text="自下而上绘制", style="Tiny.TLabel").pack(
+            side="right", pady=(2, 0))
 
-        tree_box = ttk.Frame(elem_tab, style="Panel.TFrame", padding=(6, 0, 6, 0))
-        tree_box.pack(fill="both", expand=True)
+        tree_box = tk.Frame(elem_tab, bg=CLR_PANEL)
+        tree_box.pack(fill="both", expand=True, padx=2)
         self.tree = ttk.Treeview(tree_box, columns=("t", "c", "p"), show="headings",
                                  selectmode="browse", height=12)
         self.tree.heading("t", text="类型")
         self.tree.heading("c", text="内容")
         self.tree.heading("p", text="xy")
-        self.tree.column("t", width=74, anchor="w", stretch=False)
-        self.tree.column("c", width=104, anchor="w")
-        self.tree.column("p", width=56, anchor="e", stretch=False)
+        self.tree.column("t", width=72, anchor="w", stretch=False)
+        self.tree.column("c", width=100, anchor="w")
+        self.tree.column("p", width=54, anchor="e", stretch=False)
         self.tree.pack(side="left", fill="both", expand=True)
         sb = ttk.Scrollbar(tree_box, orient="vertical", command=self.tree.yview)
         sb.pack(side="right", fill="y")
@@ -905,9 +1125,10 @@ class Designer(tk.Tk):
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Button-1>", self._on_tree_click)
 
-        addbar = ttk.Frame(elem_tab, style="Panel.TFrame", padding=(6, 8, 6, 6))
-        addbar.pack(fill="x")
-        self.add_btn = ttk.Menubutton(addbar, text="＋ 添加")
+        addbar = tk.Frame(elem_tab, bg=CLR_PANEL)
+        addbar.pack(fill="x", padx=2, pady=(8, 4))
+        self.add_btn = ttk.Menubutton(addbar, text="＋   添加元素",
+                                      style="Add.TMenubutton")
         self.add_btn.pack(fill="x")
         menu = tk.Menu(self.add_btn, tearoff=0)
         for kind in C.ELEMENT_TYPES:
@@ -915,38 +1136,32 @@ class Designer(tk.Tk):
                              command=lambda k=kind: self.add_element(k))
         self.add_btn["menu"] = menu
 
-        row = ttk.Frame(elem_tab, style="Panel.TFrame", padding=(6, 0, 6, 6))
-        row.pack(fill="x")
-        specs = (("删除", self.delete_sel, 1), ("复制", self.duplicate, 1),
-                 ("↑ 上移", lambda: self.move(-1), 1), ("↓ 下移", lambda: self.move(1), 1))
-        for col, (text, cmd, weight) in enumerate(specs):
-            row.columnconfigure(col, weight=weight)
-            ttk.Button(row, text=text, style="Small.TButton", command=cmd).grid(
+        row = tk.Frame(elem_tab, bg=CLR_PANEL)
+        row.pack(fill="x", padx=2, pady=(0, 4))
+        for col, (text, cmd) in enumerate((("删除", self.delete_sel),
+                                           ("复制", self.duplicate),
+                                           ("上移", self.raise_sel),
+                                           ("下移", self.lower_sel))):
+            row.columnconfigure(col, weight=1)
+            ttk.Button(row, text=text, style="Tiny.TButton", command=cmd).grid(
                 row=0, column=col, sticky="ew", padx=(0 if col == 0 else 4, 0))
 
         # —— 精灵动画页 ——
         self._build_sprite_tab(nb)
 
-        # 右：属性（必须先 pack，否则被 expand 的中心区挤掉）
-        right = tk.Frame(body, bg=CLR_PANEL, width=318, highlightbackground=CLR_BORDER,
-                         highlightthickness=1)
-        right.grid(row=0, column=2, sticky="nse")
-        right.pack_propagate(False)
-        rh = ttk.Frame(right, style="Panel.TFrame", padding=(12, 10, 12, 4))
-        rh.pack(fill="x")
-        ttk.Label(rh, text="属性", style="Title.TLabel").pack(anchor="w")
-        self.props_host = ttk.Frame(right, style="Panel.TFrame", padding=(12, 2, 12, 12))
-        self.props_host.pack(fill="both", expand=True)
-
-        # 中：画布
+    def _build_center_panel(self, body):
         center = tk.Frame(body, bg=CLR_BG)
-        center.grid(row=0, column=1, sticky="nsew", padx=10)
-        wrap = tk.Frame(center, bg="#e8ebf0", highlightbackground=CLR_BORDER,
-                        highlightthickness=1)
-        wrap.pack(fill="both", expand=True)
-        self.canvas = tk.Canvas(wrap, bg="#e8ebf0", highlightthickness=0,
-                               cursor="crosshair")
-        self.canvas.pack(fill="both", expand=True, pady=(14, 0))
+        center.grid(row=0, column=1, sticky="nsew", padx=12)
+
+        # 双层边框模拟画布卡片的阴影
+        stage = tk.Frame(center, bg="#dfe4ec")
+        stage.pack(fill="both", expand=True)
+        card = tk.Frame(stage, bg=U.CANVAS_BG)
+        card.pack(fill="both", expand=True, padx=1, pady=1)
+
+        self.canvas = tk.Canvas(card, bg=U.CANVAS_BG, highlightthickness=0,
+                                cursor="crosshair", bd=0)
+        self.canvas.pack(fill="both", expand=True)
         self._photo = None
         self.img_item = self.canvas.create_image(0, 0, anchor="nw")
         self.canvas.bind("<Button-1>", self._on_press)
@@ -955,54 +1170,81 @@ class Designer(tk.Tk):
         self.canvas.bind("<Motion>", self._on_motion)
         self.canvas.bind("<Leave>", lambda e: self.coord_var.set(""))
         self.canvas.bind("<Configure>", self._on_canvas_configure)
+        self.canvas.bind("<MouseWheel>", self._on_wheel)
+        # 右下角水印：画布尺寸
+        self.size_tag = self.canvas.create_text(10, 10, text="64 × 64", anchor="se",
+                                                fill=U.TEXT_FAINT,
+                                                font=("Consolas", 8))
 
-        bottom = tk.Frame(center, bg=CLR_BG)
-        bottom.pack(fill="x", pady=(6, 0))
-        ttk.Label(bottom, text="模拟时间", font=FONT_UI).pack(side="left")
-        ent = ttk.Entry(bottom, textvariable=self.sim_var, width=10, font=FONT_MONO)
-        ent.pack(side="left", padx=(4, 6))
+        tools = tk.Frame(center, bg=CLR_PANEL, highlightbackground=CLR_BORDER,
+                         highlightthickness=1)
+        tools.pack(fill="x", pady=(8, 0))
+        row = tk.Frame(tools, bg=CLR_PANEL)
+        row.pack(fill="x", padx=12, pady=6)
+        ttk.Label(row, text="模拟时间", style="Panel.TLabel").pack(side="left")
+        ent = ttk.Entry(row, textvariable=self.sim_var, width=9, font=FONT_MONO)
+        ent.pack(side="left", padx=(6, 8))
         ent.bind("<Return>", lambda e: self.redraw())
-        ttk.Checkbutton(bottom, text="跟随系统时间", variable=self.live_var,
-                        command=self._live_toggle).pack(side="left")
-        ttk.Button(bottom, text="设为现在", width=8,
-                   command=self._set_now).pack(side="left", padx=6)
-        ttk.Label(bottom, textvariable=self.coord_var, font=FONT_MONO,
-                  foreground=CLR_MUTED).pack(side="right")
+        self.live_toggle = U.Toggle(row, "跟随系统时间", self.live_var,
+                                    self._live_toggle)
+        self.live_toggle.pack(side="left", padx=(2, 0))
+        ttk.Button(row, text="设为现在", style="Tiny.TButton",
+                   command=self._set_now).pack(side="left", padx=(10, 0))
+        ttk.Label(row, textvariable=self.coord_var, style="Tiny.TLabel").pack(
+            side="right")
+
+    def _build_right_panel(self, body):
+        right = self._panel(body, 2, 326, "nse")
+        head = tk.Frame(right, bg=CLR_PANEL)
+        head.pack(fill="x", padx=14, pady=(12, 0))
+        ttk.Label(head, text="属性", style="Title.TLabel").pack(side="left")
+        self.sel_badge = U.badge(head, "", fg=CLR_MUTED, bg=U.SURFACE_SUNK)
+        self.sel_badge.pack(side="right", pady=(3, 0))
+        self.props_host = tk.Frame(right, bg=CLR_PANEL)
+        self.props_host.pack(fill="both", expand=True, padx=14, pady=(4, 12))
 
 
     def _build_status(self):
-        bar = tk.Frame(self, bg="#f7f8fa", highlightbackground=CLR_BORDER,
-                       highlightthickness=1)
+        bar = tk.Frame(self, bg=CLR_PANEL)
         bar.pack(side="bottom", fill="x")
-        inner = tk.Frame(bar, bg="#f7f8fa")
-        inner.pack(fill="x", padx=12, pady=4)
-        ttk.Label(inner, textvariable=self.msg_var, font=FONT_SMALL,
-                  foreground=CLR_MUTED, background="#f7f8fa").pack(side="right", padx=(8, 4))
-        ttk.Label(inner, textvariable=self.size_var, font=FONT_SMALL,
-                  background="#f7f8fa").pack(side="left")
-        self.pbar = ttk.Progressbar(inner, length=110, maximum=100)
-        self.pbar.pack(side="left", padx=8)
-        self.issue_lbl = ttk.Label(inner, text="", font=FONT_SMALL, background="#f7f8fa")
-        self.issue_lbl.pack(side="left", padx=6)
+        tk.Frame(bar, bg=CLR_BORDER, height=1, bd=0).pack(fill="x")
+
+        inner = tk.Frame(bar, bg=CLR_PANEL)
+        inner.pack(fill="x", padx=14, pady=6)
+        ttk.Label(inner, textvariable=self.size_var, style="Muted.TLabel").pack(
+            side="left")
+        self.pbar = ttk.Progressbar(inner, length=96, maximum=100)
+        self.pbar.pack(side="left", padx=(10, 12))
+
+        # 校验结果做成彩色徽章，红/黄/绿一眼可辨
+        self.issue_lbl = tk.Label(inner, text="", font=FONT_SMALL, fg=CLR_OK,
+                                  bg=U.OK_SOFT, padx=8, pady=2, bd=0,
+                                  highlightthickness=0)
+        self.issue_lbl.pack(side="left")
+
+        ttk.Label(inner, textvariable=self.msg_var, style="Tiny.TLabel").pack(
+            side="right", padx=(8, 0))
 
     def _build_sprite_tab(self, nb):
         """左栏「精灵动画」标签页：精灵组 + loop 实例 + 播放开关。"""
-        tab = ttk.Frame(nb, style="Panel.TFrame")
+        tab = tk.Frame(nb, bg=CLR_PANEL)
         nb.add(tab, text="动画")
 
-        # 播放控制
-        play = ttk.Frame(tab, style="Panel.TFrame", padding=(6, 6, 6, 2))
-        play.pack(fill="x")
+        play = tk.Frame(tab, bg=CLR_PANEL)
+        play.pack(fill="x", padx=2, pady=(8, 2))
         self.anim_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(play, text="播放动画预览", variable=self.anim_var,
-                        command=self._anim_toggle).pack(side="left")
+        self.anim_toggle = U.Toggle(play, "播放动画预览", self.anim_var,
+                                    self._anim_toggle)
+        self.anim_toggle.pack(side="left")
 
         # 精灵组列表
-        sh = ttk.Frame(tab, style="Panel.TFrame", padding=(6, 6, 6, 2))
-        sh.pack(fill="x")
-        ttk.Label(sh, text="精灵组（每组多帧）", style="Head.TLabel").pack(side="left")
-        sbox = ttk.Frame(tab, style="Panel.TFrame", padding=(6, 0, 6, 4))
-        sbox.pack(fill="x")
+        sh = tk.Frame(tab, bg=CLR_PANEL)
+        sh.pack(fill="x", padx=2, pady=(10, 3))
+        ttk.Label(sh, text="精灵组", style="Head.TLabel").pack(side="left")
+        ttk.Label(sh, text="多帧即连环画", style="Tiny.TLabel").pack(
+            side="right", pady=(2, 0))
+        sbox = tk.Frame(tab, bg=CLR_PANEL)
+        sbox.pack(fill="x", padx=2)
         self.sprite_tree = ttk.Treeview(sbox, columns=("idx", "frames"), show="headings",
                                         selectmode="browse", height=4)
         self.sprite_tree.heading("idx", text="#")
@@ -1012,23 +1254,25 @@ class Designer(tk.Tk):
         self.sprite_tree.pack(side="left", fill="x", expand=True)
         self.sprite_tree.bind("<<TreeviewSelect>>", self._on_sprite_select)
 
-        sbtn = ttk.Frame(tab, style="Panel.TFrame", padding=(6, 0, 6, 4))
-        sbtn.pack(fill="x")
+        sbtn = tk.Frame(tab, bg=CLR_PANEL)
+        sbtn.pack(fill="x", padx=2, pady=(4, 2))
         ttk.Button(sbtn, text="＋ 组", style="Small.TButton",
                    command=self.sprite_add_group).pack(side="left")
         ttk.Button(sbtn, text="＋ 帧", style="Small.TButton",
                    command=self.sprite_add_frame).pack(side="left", padx=4)
-        ttk.Button(sbtn, text="删", style="Small.TButton",
-                   command=self.sprite_del).pack(side="left", padx=(0, 4))
+        ttk.Button(sbtn, text="删除", style="Small.TButton",
+                   command=self.sprite_del).pack(side="left")
 
-        ttk.Separator(tab, orient="horizontal").pack(fill="x", padx=6, pady=6)
+        tk.Frame(tab, bg=CLR_BORDER, height=1).pack(fill="x", padx=2, pady=8)
 
         # loop 实例列表
-        lh = ttk.Frame(tab, style="Panel.TFrame", padding=(6, 0, 6, 2))
-        lh.pack(fill="x")
+        lh = tk.Frame(tab, bg=CLR_PANEL)
+        lh.pack(fill="x", padx=2, pady=(2, 3))
         ttk.Label(lh, text="loop 实例", style="Head.TLabel").pack(side="left")
-        lb = ttk.Frame(tab, style="Panel.TFrame", padding=(6, 0, 6, 4))
-        lb.pack(fill="x")
+        ttk.Label(lh, text="放到画布上的动画", style="Tiny.TLabel").pack(
+            side="right", pady=(2, 0))
+        lb = tk.Frame(tab, bg=CLR_PANEL)
+        lb.pack(fill="x", padx=2)
         self.loop_tree = ttk.Treeview(lb, columns=("idx", "info"), show="headings",
                                       selectmode="browse", height=4)
         self.loop_tree.heading("idx", text="#")
@@ -1039,21 +1283,23 @@ class Designer(tk.Tk):
         self.loop_tree.bind("<<TreeviewSelect>>", self._on_loop_select)
         self.loop_tree.bind("<Button-1>", self._on_loop_click)
 
-        lbtn = ttk.Frame(tab, style="Panel.TFrame", padding=(6, 0, 6, 6))
-        lbtn.pack(fill="x")
+        lbtn = tk.Frame(tab, bg=CLR_PANEL)
+        lbtn.pack(fill="x", padx=2, pady=(4, 2))
         ttk.Button(lbtn, text="＋ 实例", style="Small.TButton",
                    command=self.loop_add).pack(side="left")
-        ttk.Button(lbtn, text="删", style="Small.TButton",
+        ttk.Button(lbtn, text="删除", style="Small.TButton",
                    command=self.loop_del).pack(side="left", padx=4)
 
-        ttk.Separator(tab, orient="horizontal").pack(fill="x", padx=6, pady=6)
+        tk.Frame(tab, bg=CLR_BORDER, height=1).pack(fill="x", padx=2, pady=8)
 
         # 帧预览
-        fp = ttk.Frame(tab, style="Panel.TFrame", padding=(6, 0, 6, 6))
-        fp.pack(fill="x")
-        ttk.Label(fp, text="帧预览（点编辑 / 双击删）", style="Head.TLabel").pack(side="left", anchor="n")
-        self.frame_host = ttk.Frame(tab, style="Panel.TFrame", padding=(6, 0, 6, 8))
-        self.frame_host.pack(fill="both", expand=True)
+        fp = tk.Frame(tab, bg=CLR_PANEL)
+        fp.pack(fill="x", padx=2)
+        ttk.Label(fp, text="帧预览", style="Head.TLabel").pack(side="left")
+        ttk.Label(fp, text="单击编辑 · 双击删除", style="Tiny.TLabel").pack(
+            side="right", pady=(2, 0))
+        self.frame_host = tk.Frame(tab, bg=CLR_PANEL)
+        self.frame_host.pack(fill="both", expand=True, padx=2, pady=(4, 8))
 
     # ---------- 精灵 / loop 数据操作 ----------
     def _sprite_groups(self):
@@ -1104,6 +1350,8 @@ class Designer(tk.Tk):
         for s in sel_loop:
             if self.loop_tree.exists(s):
                 self.loop_tree.selection_add(s)
+        U.stripe_tree(self.sprite_tree)
+        U.stripe_tree(self.loop_tree)
         self._suppress = False
         self._refresh_frame_preview()
 
@@ -1159,6 +1407,8 @@ class Designer(tk.Tk):
             return
         li = self._sel_loop_entry()
         if li is not None:
+            if self._props_mode == "loop" and self._props_loop_li == li:
+                return
             self._props_mode = "loop"
             self._props_loop_li = li
             self.edit_loop_entry(li)
@@ -1197,6 +1447,14 @@ class Designer(tk.Tk):
         self._refresh_sprite_tab()
         self._refresh_issues()
 
+    def _frame_size(self, group):
+        """组内首帧尺寸。固件用第一帧 setDimensions，后续帧必须同尺寸。"""
+        for frame in group or []:
+            size = C.image_size_from_b64((frame or {}).get("image") or "")
+            if size:
+                return size
+        return None
+
     def sprite_add_frame(self):
         gi = self._sel_sprite_group()
         if gi is None:
@@ -1211,7 +1469,7 @@ class Designer(tk.Tk):
             self._refresh_issues()
 
         ImageDialog(self, None, C.rgb565_to_rgb(self.theme.get("bgColor", 0)),
-                    on_ok=apply)
+                    on_ok=apply, fixed_size=self._frame_size(group))
 
     def sprite_edit_frame(self, fi):
         gi = self._sel_sprite_group()
@@ -1228,7 +1486,7 @@ class Designer(tk.Tk):
             self._refresh_issues()
 
         ImageDialog(self, None, C.rgb565_to_rgb(self.theme.get("bgColor", 0)),
-                    on_ok=apply)
+                    on_ok=apply, fixed_size=self._frame_size(group))
 
     def sprite_del_frame(self, fi):
         gi = self._sel_sprite_group()
@@ -1270,80 +1528,70 @@ class Designer(tk.Tk):
         host = self.props_host
         for w in host.winfo_children():
             w.destroy()
-        host.columnconfigure(1, weight=1)
+        # 属性面板这一轮显示的是 loop 实例，重置缓存签名，避免下次重建判定错乱
+        self._props_sig = None
         self._prop_vars = {}
+        self._prop_text_vars = {}
+        self._prop_colors = {}
+        self._metrics_lbl = self._bbox_lbl = self._img_info_lbl = None
+        self.sel_badge.configure(text="loop #%d" % li, fg=CLR_ACCENT, bg=U.ACCENT_SOFT)
+
+        form = _PropForm(self, host)
         ttk.Label(host, text="loop 实例 #%d" % li, style="Head.TLabel").grid(
-            row=0, column=0, columnspan=2, sticky="w", pady=(2, 8))
+            row=form.row, column=0, columnspan=2, sticky="w", pady=(2, 8))
+        form.row += 1
 
-        # 帧数：用于 frameDelay→loopDelay 联动
+        form.label("引用精灵")
         groups = self._sprite_groups()
-        ref = int(entry.get("sprite", 0) or 0)
-        frame_count = len(groups[ref]) if 0 <= ref < len(groups) else 1
-
-        def label(text, r):
-            ttk.Label(host, text=text, style="Panel.TLabel").grid(
-                row=r, column=0, sticky="w", pady=3)
-
-        def num(key, r, text, lo=0, hi=32767, width=7, on_change=None):
-            label(text, r)
-            var = tk.IntVar(value=int(entry.get(key, 0) or 0))
-            sp = ttk.Spinbox(host, from_=lo, to=hi, width=width, textvariable=var)
-            sp.grid(row=r, column=1, sticky="w", pady=3)
-            self._prop_vars[key] = var
-            # 提交：回车 / 失焦 / 点击箭头 时统一落盘（避免逐位输入触发）
-            def commit(_evt=None):
-                self._set_loop_num(li, key, var)
-                if on_change:
-                    on_change()
-            sp.bind("<Return>", commit)
-            sp.bind("<FocusOut>", commit)
-            sp.configure(command=commit)
-            return var
-
-        r = 1
-        label("引用精灵", r)
         ref_var = tk.StringVar(value=str(entry.get("sprite", 0)))
         ref_cb = ttk.Combobox(host, values=[str(i) for i in range(len(groups))],
                               textvariable=ref_var, width=5, state="readonly")
-        ref_cb.grid(row=r, column=1, sticky="w", pady=3)
+        ref_cb.grid(row=form.row, column=1, sticky="w", pady=3)
         ref_cb.bind("<<ComboboxSelected>>",
                     lambda e: self._set_loop_num(li, "sprite", ref_var, is_str=True))
-        r += 1
+        form.row += 1
 
-        num("x", r, "起始 x", -64, 127)
-        r += 1
-        num("y", r, "起始 y", -64, 127)
-        r += 1
+        def apply(key, var):
+            self._set_loop_num(li, key, var)
 
-        # 帧延时改动 → 同步循环周期 = 帧延时 × 帧数
-        self._loop_frame_delay_var = num(
-            "frameDelay", r, "帧延时 ms", 1, 60000,
-            on_change=lambda: self._sync_loop_delay(li))
-        r += 1
-        self._loop_loop_delay_var = num("loopDelay", r, "循环周期 ms", 1, 60000)
-        r += 1
+        form.section("位置")
+        form.num(entry, "x", "起始 x", -64, 127, setter=apply, register=False,
+                 commit=True)
+        form.num(entry, "y", "起始 y", -64, 127, setter=apply, register=False,
+                 commit=True)
 
-        num("moveStartTime", r, "位移触发 ms", 0, 60000)
-        r += 1
-        num("moveDuration", r, "位移时长 ms", 0, 60000)
-        r += 1
-        num("moveTargetX", r, "目标 x", -1, 127)
-        r += 1
-        num("moveTargetY", r, "目标 y", -1, 127)
-        r += 1
+        form.section("节奏")
+        form.num(entry, "frameDelay", "帧延时 ms", 1, 60000, setter=apply,
+                 register=False, commit=True,
+                 on_change=lambda: self._sync_loop_delay(li))
+        self._loop_loop_delay_var = form.num(
+            entry, "loopDelay", "循环周期 ms", 1, 60000, setter=apply,
+            register=False, commit=True)
+
+        form.section("位移")
+        form.num(entry, "moveStartTime", "位移触发 ms", 0, 60000,
+                 setter=apply, register=False, commit=True)
+        form.num(entry, "moveDuration", "位移时长 ms", 0, 60000,
+                 setter=apply, register=False, commit=True)
+        form.num(entry, "moveTargetX", "目标 x", -1, 127, setter=apply,
+                 register=False, commit=True)
+        form.num(entry, "moveTargetY", "目标 y", -1, 127, setter=apply,
+                 register=False, commit=True)
 
         ret_var = tk.BooleanVar(value=bool(entry.get("shouldReturnToOrigin", False)))
-        ttk.Checkbutton(host, text="到位后返回原点（往返）", variable=ret_var,
-                        command=lambda: self._set_loop_bool(li, "shouldReturnToOrigin",
-                                                            ret_var)).grid(
-            row=r, column=0, columnspan=2, sticky="w", pady=4)
-        r += 1
+        U.Toggle(host, "到位后返回原点（往返）", ret_var,
+                 lambda: self._set_loop_bool(li, "shouldReturnToOrigin",
+                                             ret_var)).grid(
+            row=form.row, column=0, columnspan=2, sticky="w", pady=(8, 4))
+        form.row += 1
 
-        ttk.Label(host, text="帧延时改动会自动同步循环周期（帧延时 × %d 帧）。\n"
-                             "位移只在 moveDuration>0 且目标 x/y 之一 >-1 时生效。\n"
-                             "moveTargetX/Y 填 -1 表示该方向不动。" % frame_count,
-                  style="Muted.TLabel", wraplength=286, justify="left").grid(
-            row=r, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        groups = self._sprite_groups()
+        ref = int(entry.get("sprite", 0) or 0)
+        frame_count = len(groups[ref]) if 0 <= ref < len(groups) else 1
+        form.note("帧延时改动会自动同步循环周期（帧延时 × %d 帧）。\n"
+                  "位移只在 moveDuration>0 且目标 x/y 之一 >-1 时生效；\n"
+                  "moveTargetX/Y 填 -1 表示该方向不动。" % frame_count,
+                  pady=(8, 0))
 
     def _sync_loop_delay(self, li):
         """帧延时改动后，同步循环周期 = 帧延时 × 帧数。"""
@@ -1362,7 +1610,6 @@ class Designer(tk.Tk):
             return
         self.snapshot("loop:num:loopDelay")
         entry["loopDelay"] = new_loop
-        # 同步回界面上的循环周期输入框
         if getattr(self, "_loop_loop_delay_var", None) is not None:
             try:
                 if int(self._loop_loop_delay_var.get()) != new_loop:
@@ -1429,26 +1676,117 @@ class Designer(tk.Tk):
         self.canvas.itemconfig(self.img_item, image=self._photo)
 
     def _form_row(self, parent, row, label, widget):
-        ttk.Label(parent, text=label, style="Panel.TLabel", width=7).grid(
-            row=row, column=0, sticky="w", pady=3)
+        ttk.Label(parent, text=label, style="Muted.TLabel").grid(
+            row=row, column=0, sticky="w", pady=3, padx=(0, 8))
         widget.grid(row=row, column=1, sticky="ew", pady=3)
         return widget
 
+    # ---------- 快捷键 ----------
+    TEXT_WIDGETS = frozenset(("Entry", "TEntry", "Spinbox", "TSpinbox",
+                              "TCombobox", "Text"))
+
+    def _text_focused(self):
+        """焦点在文本输入类控件里时，单键（Del / Esc）应该让行给它。"""
+        try:
+            w = self.focus_get()
+        except Exception:
+            return False
+        return w is not None and w.winfo_class() in self.TEXT_WIDGETS
+
+    def _in_main_window(self):
+        """弹窗打开时不响应主窗口快捷键，避免在对话框里按 Del 删掉元素。"""
+        try:
+            w = self.focus_get()
+        except Exception:
+            return True
+        if w is None:
+            return True
+        try:
+            return w.winfo_toplevel() is self
+        except Exception:
+            return True
+
+    def _handler(self, act):
+        method = getattr(self, act["method"])
+        single = act.get("scope") == "single"
+
+        def run(_evt=None):
+            if not self._in_main_window():
+                return None
+            if single and self._text_focused():
+                return None
+            method()
+            return "break"
+
+        return run
+
     def _bind_keys(self):
-        self.bind_all("<Control-z>", lambda e: self.do_undo())
-        self.bind_all("<Control-y>", lambda e: self.do_redo())
-        self.bind_all("<Control-s>", lambda e: self.save_file())
-        self.bind_all("<Control-S>", lambda e: self.save_as())
-        self.bind_all("<Control-o>", lambda e: self.open_file())
-        self.bind_all("<Control-n>", lambda e: self.new_theme())
-        self.bind_all("<Control-d>", lambda e: self.duplicate())
-        self.bind_all("<Control-Up>", lambda e: self.move(-1))
-        self.bind_all("<Control-Down>", lambda e: self.move(1))
-        self.bind_all("<Control-u>", lambda e: self.dev_upload())
-        self.canvas.bind("<Delete>", lambda e: self.delete_sel())
+        """绑定全部来自 ACTIONS，新增动作不需要再改这里。"""
+        for act in ACTIONS:
+            handler = self._handler(act)
+            for seq in act.get("seq", ()):
+                self.bind_all(seq, handler, add="+")
+        # 画布内方向键微调：1px，按住 Shift 走 10px
         for key, delta in (("Left", (-1, 0)), ("Right", (1, 0)),
                            ("Up", (0, -1)), ("Down", (0, 1))):
-            self.canvas.bind("<%s>" % key, lambda e, d=delta: self.nudge(d))
+            self.canvas.bind("<%s>" % key, lambda e, d=delta: self._nudge_key(e, d))
+            self.canvas.bind("<Shift-%s>" % key,
+                             lambda e, d=delta: self._nudge_key(e, d, 10))
+        self.canvas.bind("<Control-MouseWheel>", self._on_wheel)
+
+    def _nudge_key(self, _evt, delta, step=1):
+        self.nudge((delta[0] * step, delta[1] * step))
+        return "break"
+
+    def _on_wheel(self, evt):
+        self.set_zoom(1 if evt.delta > 0 else -1)
+        return "break"
+
+    # ---------- 视图动作 ----------
+    def raise_sel(self):
+        self.move(-1)
+
+    def lower_sel(self):
+        self.move(1)
+
+    def select_prev(self):
+        self._select_step(-1)
+
+    def select_next(self):
+        self._select_step(1)
+
+    def _select_step(self, delta):
+        n = len(self.theme.get("setup", []))
+        if not n:
+            return
+        base = self.sel if 0 <= self.sel < n else (-1 if delta > 0 else n)
+        self.sel = max(0, min(n - 1, base + delta))
+        self.refresh_selection_only()
+        self.msg("选中第 %d / %d 个元素" % (self.sel + 1, n))
+
+    def deselect(self):
+        if self.sel < 0:
+            return
+        self.sel = -1
+        self.refresh_selection_only()
+
+    def zoom_in(self):
+        self.set_zoom(1)
+
+    def zoom_out(self):
+        self.set_zoom(-1)
+
+    def zoom_fit(self):
+        self._zoom_auto = True
+        self._refit_zoom()
+        self.msg("缩放已适应窗口")
+
+    def toggle_grid(self):
+        if getattr(self, "grid_toggle", None) is not None:
+            self.grid_toggle.toggle()
+        else:
+            self.grid_var.set(not self.grid_var.get())
+            self.redraw()
 
     # ---------- 配置 ----------
     def _load_cfg(self):
@@ -1548,6 +1886,8 @@ class Designer(tk.Tk):
     def _set_now(self):
         self.sim_var.set(datetime.now().strftime("%H:%M:%S"))
         self.live_var.set(False)
+        if getattr(self, "live_toggle", None) is not None:
+            self.live_toggle.set(False)
         self.redraw()
 
     def _tick(self):
@@ -1649,6 +1989,8 @@ class Designer(tk.Tk):
             if z != self.zoom:
                 self.zoom = z
                 self.zoom_lbl.configure(text="%dx" % z)
+        if getattr(self, "size_tag", None):
+            self.canvas.coords(self.size_tag, evt.width - 10, evt.height - 8)
         self.redraw()
 
     def _to_panel(self, evt):
@@ -1831,26 +2173,23 @@ class Designer(tk.Tk):
 
     # ---------- 刷新 ----------
     def refresh_all(self, rebuild_props=False):
+        """全量刷新：模型 → 左栏表单 → 列表 → 属性 → 画布 → 状态栏。"""
         self._suppress = True
         self.name_var.set(self.theme.get("name", ""))
         self.author_var.set(self.theme.get("author", ""))
         self.ver_var.set(int(self.theme.get("version", 1) or 1))
         self.delay_var.set(int(self.theme.get("delay", 300) or 0))
-        for child in self._form_colorrow():
-            child.set(int(self.theme.get("bgColor", 0)))
+        self._bg_row.set(int(self.theme.get("bgColor", 0)))
         self._suppress = False
         self._refresh_tree()
         self._refresh_sprite_tab()
         if rebuild_props:
             self.rebuild_props()
+        size = C.theme_bytes(self.theme)
         self.redraw()
-        self.size_var.set(self._size_text())
-        self._refresh_issues()
+        self.size_var.set(self._size_text(size))
+        self._refresh_issues(size)
         self._update_title()
-
-    def _form_colorrow(self):
-        """左栏里的 ColorRow（主题背景色）。"""
-        return [self._bg_row] if hasattr(self, "_bg_row") else []
 
     def _refresh_tree(self):
         self._suppress = True
@@ -1858,6 +2197,7 @@ class Designer(tk.Tk):
         when = self.sim_time()
         for i, el in enumerate(self.theme.get("setup", [])):
             self.tree.insert("", "end", iid=str(i), values=self._row_values(el, when))
+        U.stripe_tree(self.tree)
         if self.theme.get("setup") and 0 <= self.sel < len(self.theme["setup"]):
             self.tree.selection_set(str(self.sel))
             self.tree.see(str(self.sel))
@@ -1896,7 +2236,7 @@ class Designer(tk.Tk):
         else:
             self.tree.selection_remove(self.tree.selection())
         self._suppress = False
-        self.rebuild_props()
+        self.rebuild_props(force=False)
         self.redraw()
         self._refresh_issues()
 
@@ -1906,12 +2246,15 @@ class Designer(tk.Tk):
         sel = self.tree.selection()
         if not sel:
             return
-        self.sel = int(sel[0])
+        new_sel = int(sel[0])
+        # 选中项没变且已是元素模式 → 无事可做，直接返回（避免循环刷新）
+        if new_sel == self.sel and self._props_mode == "element":
+            return
+        self.sel = new_sel
         # 切回元素模式，重画元素属性面板
         self._props_mode = "element"
         self._props_loop_li = None
-        self.rebuild_props()
-        self.redraw()
+        self.refresh_selection_only()
 
     def _on_tree_click(self, _evt):
         """点元素树（即使选中项没变）也强制切回元素属性面板。
@@ -1927,255 +2270,262 @@ class Designer(tk.Tk):
                 self.sel = int(sel[0])
                 self._props_mode = "element"
                 self._props_loop_li = None
-                self.rebuild_props()
-                self.redraw()
+                self.refresh_selection_only()
 
-    def _size_text(self):
-        s = C.theme_summary(self.theme)
-        pct = 100.0 * s["bytes"] / s["capacity"]
-        return "JSON %s / %d KB (%.0f%%)   元素 %d" % (
-            _fmt_bytes(s["bytes"]), s["capacity"] // 1024, pct, s["elements"])
+    def _size_text(self, size=None):
+        size = C.theme_bytes(self.theme) if size is None else size
+        pct = 100.0 * size / C.JSON_DOC_CAPACITY
+        return "JSON %s / %d KB (%.0f%%)   ·   %d 个元素" % (
+            _fmt_bytes(size), C.JSON_DOC_CAPACITY // 1024, pct,
+            len(self.theme.get("setup", []) or []))
 
-    def _refresh_issues(self):
-        issues = C.validate(self.theme, self.sim_time())
+    def _refresh_issues(self, size=None):
+        size = C.theme_bytes(self.theme) if size is None else size
+        issues = C.validate(self.theme, self.sim_time(), size=size)
         errs = [m for lvl, m in issues if lvl == "error"]
         warns = [m for lvl, m in issues if lvl == "warn"]
-        size = C.theme_bytes(self.theme)
         self.pbar.configure(value=min(100, 100.0 * size / C.JSON_DOC_CAPACITY))
         if errs:
-            self.issue_lbl.configure(text="✕ %d 个错误 · %d 个提醒（点击查看）" % (len(errs), len(warns)),
-                                     foreground=CLR_ERR, cursor="hand2")
+            text = "✕  %d 个错误 · %d 个提醒" % (len(errs), len(warns))
+            fg, bg, cursor = CLR_ERR, U.ERR_SOFT, "hand2"
         elif warns:
-            self.issue_lbl.configure(text="! %d 个提醒（点击查看）" % len(warns),
-                                     foreground=CLR_WARN, cursor="hand2")
+            text = "!  %d 个提醒" % len(warns)
+            fg, bg, cursor = CLR_WARN, U.WARN_SOFT, "hand2"
         else:
-            self.issue_lbl.configure(text="✓ 校验通过", foreground=CLR_OK, cursor="")
+            text, fg, bg, cursor = "✓  校验通过", CLR_OK, U.OK_SOFT, ""
+        self.issue_lbl.configure(text=text, fg=fg, bg=bg, cursor=cursor)
         self.issue_lbl.unbind("<Button-1>")
         if errs or warns:
             self.issue_lbl.bind("<Button-1>", lambda e, i=issues: self.show_issues(i))
+        return issues
 
     def show_issues(self, issues):
-        win = tk.Toplevel(self)
-        win.title("校验结果")
-        win.configure(bg=CLR_BG)
-        win.geometry("620x360")
-        win.transient(self)
-        txt = tk.Text(win, wrap="word", font=FONT_UI, bg="#ffffff", relief="flat",
-                      padx=12, pady=10)
-        txt.pack(fill="both", expand=True, padx=10, pady=10)
-        marks = {"error": "✕ 错误", "warn": "! 提醒", "info": "· 提示"}
+        win = U.prepare_window(tk.Toplevel(self), "校验结果", "660x420", self)
+        win.configure(bg=CLR_PANEL)
+        head = tk.Frame(win, bg=CLR_PANEL)
+        head.pack(fill="x", padx=18, pady=(14, 8))
+        ttk.Label(head, text="校验结果", style="Title.TLabel").pack(side="left")
+        ttk.Label(head, text="%d 条" % len(issues), style="Tiny.TLabel").pack(
+            side="right", pady=(4, 0))
+        tk.Frame(win, bg=CLR_BORDER, height=1).pack(fill="x")
+
+        txt = tk.Text(win, wrap="word", font=FONT_UI, bg=CLR_PANEL, relief="flat",
+                      padx=16, pady=12, bd=0, highlightthickness=0,
+                      spacing1=2, spacing3=5)
+        txt.pack(fill="both", expand=True)
+        marks = {"error": "✕  错误", "warn": "!  提醒", "info": "·  提示"}
+        colors = {"error": CLR_ERR, "warn": CLR_WARN, "info": CLR_MUTED}
+        for level, color in colors.items():
+            txt.tag_configure(level, foreground=color)
         for level, message in issues:
-            txt.insert("end", "%s  %s\n" % (marks.get(level, level), message))
+            txt.insert("end", "%s    " % marks.get(level, level), (level,))
+            txt.insert("end", "%s\n" % message)
         txt.configure(state="disabled")
-        ttk.Button(win, text="关闭", command=win.destroy).pack(pady=(0, 10))
+
+        foot = tk.Frame(win, bg=CLR_PANEL)
+        foot.pack(fill="x", padx=18, pady=(0, 12))
+        ttk.Button(foot, text="关闭", style="Ghost.TButton",
+                   command=win.destroy).pack(side="right")
 
     # ---------- 属性面板 ----------
-    def rebuild_props(self):
-        """按当前模式重建属性面板。loop 模式优先于元素模式。"""
+    def _build_empty_props(self):
+        host = self.props_host
+        host.columnconfigure(1, weight=1)
+        card = tk.Frame(host, bg=U.SURFACE_ALT, highlightbackground=U.BORDER,
+                        highlightthickness=1)
+        card.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(4, 10))
+        tk.Label(card, text="未选中元素", bg=U.SURFACE_ALT, fg=U.TEXT,
+                 font=U.FONT_UI_B).pack(anchor="w", padx=12, pady=(10, 2))
+        tk.Label(card, text="在左侧列表或画布上点选一个元素，\n这里会显示它的全部属性。",
+                 bg=U.SURFACE_ALT, fg=U.TEXT_MUTED, font=U.FONT_SMALL,
+                 justify="left").pack(anchor="w", padx=12, pady=(0, 10))
+
+        tips = ("画布操作\n"
+                "· 拖动元素移动位置\n"
+                "· 方向键微调 1px，Shift+方向键 10px\n"
+                "· Ctrl+滚轮缩放\n"
+                "· Ctrl+D 复制，Del 删除，Esc 取消选中")
+        ttk.Label(host, text=tips, style="Muted.TLabel", justify="left").grid(
+            row=1, column=0, columnspan=2, sticky="w")
+
+    def rebuild_props(self, force=True):
+        """重建右栏属性面板。
+
+        loop 模式优先：属性面板显示 loop 实例时，走 edit_loop_entry。
+        force=False 时用 (选中索引, 类型, 字段集合) 判断是否必须重建：
+        字段没变就只同步数值，避免拖动/撤销时反复销毁控件导致焦点丢失。
+        """
         if self._props_mode == "loop" and self._props_loop_li is not None:
             self.edit_loop_entry(self._props_loop_li)
             return
-        self._rebuild_element_props()
+        el = self.current()
+        sig = (self.sel,
+               el.get("type") if el else None,
+               tuple(sorted(el.keys())) if el else ())
+        if not force and sig == self._props_sig:
+            self._sync_props_all()
+            self._refresh_prop_info()
+            return
+        self._props_sig = sig
 
-    def _rebuild_element_props(self):
+        self._prop_vars = {}
+        self._prop_text_vars = {}
+        self._prop_colors = {}
+        self._prop_font_var = None
+        self._metrics_lbl = None
+        self._bbox_lbl = None
+        self._img_info_lbl = None
+        self._thumb_ref = None
+
         for child in self.props_host.winfo_children():
             child.destroy()
-        el = self.current()
-        host = self.props_host
-        host.columnconfigure(1, weight=1)
-        self._prop_vars = {}
+
         if el is None:
-            ttk.Label(host, text="左侧选中一个元素后\n在这里编辑它的属性。",
-                      style="Muted.TLabel", justify="left", wraplength=286).grid(row=0, column=0,
-                                                                 columnspan=2, sticky="w",
-                                                                 pady=8)
-            ttk.Label(host, text="提示：画布上可直接拖动元素；\n方向键微调 1px；Ctrl+D 复制。",
-                      style="Muted.TLabel", justify="left", wraplength=286).grid(row=1, column=0,
-                                                                 columnspan=2, sticky="w")
+            self.sel_badge.configure(text="未选中", fg=CLR_MUTED, bg=U.SURFACE_SUNK)
+            self._build_empty_props()
             return
 
+        kind = el.get("type") or "?"
+        self.sel_badge.configure(text=C.TYPE_LABELS.get(kind, kind),
+                                 fg=CLR_ACCENT, bg=U.ACCENT_SOFT)
+        form = _PropForm(self, self.props_host)
+        handler = {"text": self._props_text, "datetime": self._props_text,
+                   "rect": self._props_rect, "fillrect": self._props_rect,
+                   "line": self._props_line, "image": self._props_image}.get(kind)
+        if handler:
+            handler(form, el)
+        self._props_footer(form, el)
+
+    def _props_text(self, f, el):
         kind = el.get("type")
-        row = 0
-        ttk.Label(host, text="%s   ·   %s" % (C.TYPE_LABELS.get(kind, kind), kind),
-                  style="Head.TLabel").grid(row=row, column=0, columnspan=2,
-                                             sticky="w", pady=(2, 8))
-        row += 1
+        f.section("内容")
+        f.text(el, "content", "文字" if kind == "text" else "格式")
+        f.label("字体")
+        font_var = tk.StringVar(value=FONT_LABELS.get(el.get("font", "default"),
+                                                      FONT_LABELS["default"]))
+        cb = ttk.Combobox(self.props_host, values=[FONT_LABELS[k] for k in FONT_KEYS],
+                          textvariable=font_var, state="readonly")
+        cb.grid(row=f.row, column=1, sticky="ew", pady=3)
+        cb.bind("<<ComboboxSelected>>", lambda e: self._set_font(font_var.get()))
+        self._prop_font_var = font_var
+        f.row += 1
 
-        def label(text, r):
-            ttk.Label(host, text=text, style="Panel.TLabel").grid(
-                row=r, column=0, sticky="w", pady=3)
+        f.section("颜色")
+        f.color(el, "fgColor", "前景色", 65535)
+        f.label("背景色")
+        holder = tk.Frame(self.props_host, bg=U.SURFACE)
+        holder.grid(row=f.row, column=1, sticky="w", pady=3)
+        bg_row = ColorRow(holder, el.get("bgColor", 0),
+                          on_change=lambda v: self._set_color("bgColor", v))
+        bg_row.pack(side="left")
+        has_bg = "bgColor" in el
+        bg_row.set_enabled(has_bg)
+        self._prop_colors["bgColor"] = bg_row
+        chk = tk.BooleanVar(value=has_bg)
+        U.Toggle(self.props_host, "给文字加底衬", chk,
+                 lambda: self._toggle_bg(chk, bg_row)).grid(
+            row=f.row + 1, column=1, sticky="w")
+        f.row += 2
 
-        def num(key, r, label_text, lo=-64, hi=127, width=6):
-            label(label_text, r)
-            var = tk.IntVar(value=int(el.get(key, 0) or 0))
-            sp = ttk.Spinbox(host, from_=lo, to=hi, width=width, textvariable=var,
-                             command=lambda k=key, v=var: self._set_num(k, v))
-            sp.grid(row=r, column=1, sticky="w", pady=3)
-            var.trace_add("write", lambda *a, k=key, v=var: self._set_num(k, v))
-            self._prop_vars[key] = var
-            return var
+        f.section("位置")
+        f.num(el, "x", "x")
+        f.num(el, "y", "y")
+        f.buttons((("水平居中", lambda: self.center_el("h")),
+                   ("垂直居中", lambda: self.center_el("v"))))
+        self._metrics_lbl = f.note("", pady=(8, 0))
+        if kind == "datetime":
+            f.note("格式符：H:i · H:i:s · m-d · D, m/d · A\n"
+                   "PHP / ezTime 风格，不是 strftime")
 
-        if kind in ("text", "datetime"):
-            label("内容", row)
-            content_var = tk.StringVar(value=el.get("content", ""))
-            ent = ttk.Entry(host, textvariable=content_var)
-            ent.grid(row=row, column=1, sticky="ew", pady=3)
-            content_var.trace_add("write", lambda *a: self._set_text("content", content_var))
-            row += 1
+    def _props_rect(self, f, el):
+        f.section("外观")
+        f.color(el, "color", "颜色", 65535)
+        f.section("位置与尺寸")
+        f.num(el, "x", "x")
+        f.num(el, "y", "y")
+        f.num(el, "width", "宽", 0, 127)
+        f.num(el, "height", "高", 0, 127)
+        f.buttons((("整屏边框", lambda: self.quick_rect("border")),
+                   ("铺满全屏", lambda: self.quick_rect("full"))))
 
-            label("字体", row)
-            font_var = tk.StringVar(value=FONT_LABELS.get(el.get("font", "default"),
-                                                          FONT_LABELS["default"]))
-            cb = ttk.Combobox(host, values=[FONT_LABELS[k] for k in FONT_KEYS],
-                              textvariable=font_var, state="readonly")
-            cb.grid(row=row, column=1, sticky="ew", pady=3)
-            cb.bind("<<ComboboxSelected>>", lambda e: self._set_font(font_var.get()))
-            row += 1
+    def _props_line(self, f, el):
+        f.section("外观")
+        f.color(el, "color", "颜色", 65535)
+        f.section("端点")
+        f.num(el, "x", "起点 x")
+        f.num(el, "y", "起点 y")
+        f.num(el, "x1", "终点 x")
+        f.num(el, "y1", "终点 y")
+        f.buttons((("水平线", lambda: self.quick_line("h")),
+                   ("垂直线", lambda: self.quick_line("v"))))
 
-            label("前景色", row)
-            ColorRow(host, el.get("fgColor", 65535),
-                     on_change=lambda v: self._set_color("fgColor", v)).grid(
-                row=row, column=1, sticky="w", pady=3)
-            row += 1
+    def _props_image(self, f, el):
+        b64 = el.get("image") or ""
+        size = C.image_size_from_b64(b64)
+        self._img_info_lbl = f.note("", pady=(0, 6))
+        if size:
+            thumb = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB")
+            scale = max(1, min(6, 150 // max(thumb.size)))
+            thumb = thumb.resize((thumb.size[0] * scale, thumb.size[1] * scale),
+                                 Image.NEAREST)
+            self._thumb_ref = ImageTk.PhotoImage(thumb)
+            box = tk.Frame(self.props_host, bg=U.SURFACE_ALT,
+                           highlightbackground=U.BORDER, highlightthickness=1)
+            tk.Label(box, image=self._thumb_ref, bg=U.SURFACE_ALT, bd=0).pack(
+                padx=8, pady=8)
+            f.wide(box, pady=(0, 8))
+        f.buttons((("选择图片…", self.pick_image),), pady=(2, 8))
+        f.section("位置")
+        f.num(el, "x", "x")
+        f.num(el, "y", "y")
+        f.note("图片不支持透明：导入时透明像素会按背景色压平。")
 
-            label("背景色", row)
-            bg_holder = ttk.Frame(host, style="Panel.TFrame")
-            bg_holder.grid(row=row, column=1, sticky="w", pady=3)
-            has_bg = "bgColor" in el
-            bg_row = ColorRow(bg_holder, el.get("bgColor", 0),
-                              on_change=lambda v: self._set_color("bgColor", v))
-            bg_row.pack(side="left")
-            if not has_bg:
-                bg_row.btn.configure(state="disabled")
-                bg_row.entry.configure(state="disabled")
-            chk_var = tk.BooleanVar(value=has_bg)
-            ttk.Checkbutton(host, text="填写 bgColor", variable=chk_var,
-                            command=lambda: self._toggle_bg(chk_var, bg_row)).grid(
-                row=row + 1, column=1, sticky="w")
-            row += 2
+    def _props_footer(self, f, el):
+        tk.Frame(self.props_host, bg=U.BORDER, height=1).grid(
+            row=f.row, column=0, columnspan=2, sticky="ew", pady=(14, 8))
+        f.row += 1
+        self._bbox_lbl = ttk.Label(self.props_host, text="", style="Tiny.TLabel",
+                                   justify="left", wraplength=290)
+        self._bbox_lbl.grid(row=f.row, column=0, columnspan=2, sticky="w")
 
-            num("x", row, "x")
-            row += 1
-            num("y", row, "y")
-            row += 1
-
-            align = ttk.Frame(host, style="Panel.TFrame")
-            align.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(8, 2))
-            ttk.Button(align, text="水平居中", width=10,
-                       command=lambda: self.center_el("h")).pack(side="left")
-            ttk.Button(align, text="垂直居中", width=10,
-                       command=lambda: self.center_el("v")).pack(side="left", padx=6)
-            row += 1
-
-            when = self.sim_time()
+    def _refresh_prop_info(self):
+        """只刷新会随数值变化的说明文字，不重建控件。"""
+        el = self.current()
+        if el is None:
+            return
+        when = self.sim_time()
+        if self._metrics_lbl is not None:
             font = C.get_font(el.get("font"))
-            text = C.element_text(el, when)
-            x1, y1, w, h, adv = font.text_bounds(text, 0, 0)
-            info = "墨迹 %dx%d · 偏移(%d,%d) · 进宽 %d" % (w, h, x1, y1, adv)
-            ttk.Label(host, text=info, style="Muted.TLabel", wraplength=286,
-                      justify="left").grid(
-                row=row, column=0, columnspan=2, sticky="w", pady=(4, 0))
-            row += 1
-            if kind == "datetime":
-                ttk.Label(host, text="格式符 H:i · H:i:s · m-d · D, m/d · A\n"
-                                     "（PHP/ezTime 风格，不是 strftime）",
-                          style="Muted.TLabel", justify="left", wraplength=286).grid(
-                    row=row, column=0, columnspan=2, sticky="w", pady=(4, 0))
-                row += 1
-
-        elif kind in ("rect", "fillrect"):
-            label("颜色", row)
-            ColorRow(host, el.get("color", 65535),
-                     on_change=lambda v: self._set_color("color", v)).grid(
-                row=row, column=1, sticky="w", pady=3)
-            row += 1
-            num("x", row, "x")
-            row += 1
-            num("y", row, "y")
-            row += 1
-            num("width", row, "宽", 0, 127)
-            row += 1
-            num("height", row, "高", 0, 127)
-            row += 1
-            bb = ttk.Frame(host, style="Panel.TFrame")
-            bb.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(8, 2))
-            ttk.Button(bb, text="整屏 1px 边框", command=lambda: self.quick_rect("border")).pack(side="left")
-            ttk.Button(bb, text="铺满全屏", command=lambda: self.quick_rect("full")).pack(side="left", padx=6)
-            row += 1
-
-        elif kind == "line":
-            label("颜色", row)
-            ColorRow(host, el.get("color", 65535),
-                     on_change=lambda v: self._set_color("color", v)).grid(
-                row=row, column=1, sticky="w", pady=3)
-            row += 1
-            num("x", row, "x")
-            row += 1
-            num("y", row, "y")
-            row += 1
-            num("x1", row, "x1")
-            row += 1
-            num("y1", row, "y1")
-            row += 1
-            bb = ttk.Frame(host, style="Panel.TFrame")
-            bb.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(8, 2))
-            ttk.Button(bb, text="水平", width=6,
-                       command=lambda: self.quick_line("h")).pack(side="left")
-            ttk.Button(bb, text="垂直", width=6,
-                       command=lambda: self.quick_line("v")).pack(side="left", padx=6)
-            row += 1
-
-        elif kind == "image":
-            size = C.image_size_from_b64(el.get("image") or "")
+            x1, y1, w, h, adv = font.text_bounds(C.element_text(el, when), 0, 0)
+            self._metrics_lbl.configure(
+                text="墨迹 %dx%d · 偏移 (%d,%d) · 进宽 %d" % (w, h, x1, y1, adv))
+        if self._img_info_lbl is not None:
+            b64 = el.get("image") or ""
+            size = C.image_size_from_b64(b64)
             if size:
-                raw_len = len(base64.b64decode(el.get("image") or ""))
-                ok = raw_len <= C.IMAGE_DECODE_LIMIT
-                ttk.Label(host, text="图片 %dx%d  ·  PNG %d B %s" % (
-                    size[0], size[1], raw_len, "✓" if ok else "✕ 超限"),
-                    style="Head.TLabel",
-                    foreground=CLR_OK if ok else CLR_ERR).grid(
-                    row=row, column=0, columnspan=2, sticky="w", pady=(0, 6))
-                row += 1
-                thumb = Image.open(io.BytesIO(base64.b64decode(el["image"])))
-                thumb = thumb.convert("RGB")
-                scale = max(1, min(6, 160 // max(thumb.size)))
-                thumb = thumb.resize((thumb.size[0] * scale, thumb.size[1] * scale),
-                                     Image.NEAREST)
-                self._thumb_ref = ImageTk.PhotoImage(thumb)
-                lb = tk.Label(host, image=self._thumb_ref, bg="#111111",
-                              highlightbackground=CLR_BORDER, highlightthickness=1)
-                lb.grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 8))
-                row += 1
-            bb = ttk.Frame(host, style="Panel.TFrame")
-            bb.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(2, 6))
-            ttk.Button(bb, text="选择图片…", command=self.pick_image).pack(side="left")
-            row += 1
-            num("x", row, "x")
-            row += 1
-            num("y", row, "y")
-            row += 1
-            ttk.Label(host, text="图片元素不支持透明度：透明像素会\n按导入时选的背景色填充。",
-                      style="Muted.TLabel", justify="left").grid(
-                row=row, column=0, columnspan=2, sticky="w", pady=(6, 0))
-            row += 1
-
-        ttk.Separator(host, orient="horizontal").grid(
-            row=row, column=0, columnspan=2, sticky="ew", pady=10)
-        row += 1
-        box = C.element_box(el, self.sim_time())
-        host.update_idletasks()
-        ttk.Label(host, text="包围盒 (%d,%d)-(%d,%d)，尺寸 %dx%d" % (
-            box[0], box[1], box[2], box[3], box[2] - box[0], box[3] - box[1]),
-            style="Muted.TLabel", wraplength=286, justify="left").grid(
-            row=row, column=0, columnspan=2, sticky="w")
+                raw = len(base64.b64decode(b64))
+                ok = raw <= C.IMAGE_DECODE_LIMIT
+                self._img_info_lbl.configure(
+                    text="图片 %dx%d · PNG %d B%s" % (
+                        size[0], size[1], raw,
+                        "   ✓ 可放入设备" if ok else "   ✕ 超出 1024B"),
+                    foreground=CLR_OK if ok else CLR_ERR)
+        if self._bbox_lbl is not None:
+            box = C.element_box(el, when)
+            self._bbox_lbl.configure(
+                text="包围盒 (%d,%d)–(%d,%d) · %dx%d" % (
+                    box[0], box[1], box[2], box[3], box[2] - box[0], box[3] - box[1]))
 
     # ---------- 属性改动 ----------
     def _after_field(self, key=None):
+        """一处改动后的统一刷新：数据已改，UI 跟着走。"""
         self._mark_dirty()
         self.redraw()
-        self.size_var.set(self._size_text())
-        self._refresh_issues()
+        size = C.theme_bytes(self.theme)
+        self.size_var.set(self._size_text(size))
+        self._refresh_issues(size)
         self._refresh_tree_labels()
+        self._refresh_prop_info()
 
     def _set_num(self, key, var):
         el = self.current()
@@ -2191,17 +2541,39 @@ class Designer(tk.Tk):
         el[key] = value
         self._after_field()
 
-    def _sync_props_numbers(self):
+    def _sync_props_all(self):
+        """拖动/撤销后把面板控件拉回模型值，不重建控件、不打断输入焦点。"""
         el = self.current()
-        if el is None or not getattr(self, "_prop_vars", None):
+        if el is None:
             return
-        for key, var in self._prop_vars.items():
+        for key, var in getattr(self, "_prop_vars", {}).items():
+            if key not in el:
+                continue
+            try:
+                if int(var.get()) != int(el[key]):
+                    var.set(int(el[key]))
+            except Exception:
+                pass
+        for key, var in getattr(self, "_prop_text_vars", {}).items():
+            try:
+                if var.get() != str(el.get(key, "")):
+                    var.set(str(el.get(key, "")))
+            except Exception:
+                pass
+        for key, row in getattr(self, "_prop_colors", {}).items():
             if key in el:
                 try:
-                    if int(var.get()) != int(el[key]):
-                        var.set(int(el[key]))
+                    if int(row.value) != int(el[key]):
+                        row.set(int(el[key]))
                 except Exception:
                     pass
+        if self._prop_font_var is not None:
+            self._prop_font_var.set(FONT_LABELS.get(el.get("font", "default"),
+                                                    FONT_LABELS["default"]))
+
+    # 旧名保留，内部实现已扩展为同步全部控件
+    def _sync_props_numbers(self):
+        self._sync_props_all()
 
     def _set_text(self, key, var):
         el = self.current()
@@ -2220,10 +2592,11 @@ class Designer(tk.Tk):
             return
         for key, text in FONT_LABELS.items():
             if text == label:
+                if el.get("font") == key:
+                    return
                 self.snapshot(key="font")
                 el["font"] = key
                 self._after_field()
-                self.rebuild_props()
                 return
 
     def _set_color(self, key, value):
@@ -2243,13 +2616,11 @@ class Designer(tk.Tk):
         self.snapshot()
         if var.get():
             el["bgColor"] = int(bg_row.value)
-            bg_row.btn.configure(state="normal")
-            bg_row.entry.configure(state="normal")
         else:
             el.pop("bgColor", None)
-            bg_row.btn.configure(state="disabled")
-            bg_row.entry.configure(state="disabled")
+        bg_row.set_enabled(var.get())
         self._after_field()
+        self.rebuild_props()   # bgColor 字段有无变化，需要重排面板
 
     def _theme_field(self, key, var):
         if self._suppress:
@@ -2628,17 +2999,98 @@ class Designer(tk.Tk):
         self.zoom_lbl.configure(text="%dx" % z)
         self.redraw()
 
-    def show_help(self):
-        win = tk.Toplevel(self)
-        win.title("Canvas 格式速查 / 固件限制")
-        win.configure(bg=CLR_BG)
-        win.geometry("700x560")
-        win.transient(self)
-        txt = tk.Text(win, wrap="word", font=FONT_UI, bg="#ffffff", relief="flat",
-                      padx=14, pady=12)
-        txt.pack(fill="both", expand=True, padx=10, pady=10)
-        txt.insert("end", HELP_TEXT)
+    def _text_window(self, title, body):
+        """统一的纯文本窗口（帮助 / 速查）。"""
+        win = U.prepare_window(tk.Toplevel(self), title, "720x560", self)
+        win.configure(bg=CLR_PANEL)
+        head = tk.Frame(win, bg=CLR_PANEL)
+        head.pack(fill="x", padx=18, pady=(14, 8))
+        ttk.Label(head, text=title, style="Title.TLabel").pack(side="left")
+        tk.Frame(win, bg=CLR_BORDER, height=1).pack(fill="x")
+        txt = tk.Text(win, wrap="word", font=FONT_MONO, bg=CLR_PANEL, relief="flat",
+                      padx=16, pady=12, bd=0, highlightthickness=0)
+        txt.pack(fill="both", expand=True)
+        txt.insert("end", body)
         txt.configure(state="disabled")
+        return win
+
+    def show_help(self):
+        self._text_window("Canvas 格式速查 / 固件限制", HELP_TEXT)
+
+    def show_shortcuts(self):
+        win = U.prepare_window(tk.Toplevel(self), "快捷键一览", "720x600", self)
+        win.configure(bg=CLR_PANEL)
+        head = tk.Frame(win, bg=CLR_PANEL)
+        head.pack(fill="x", padx=20, pady=(16, 4))
+        ttk.Label(head, text="快捷键", style="Title.TLabel").pack(side="left")
+        ttk.Label(head, text="v%s" % APP_VER, style="Tiny.TLabel").pack(
+            side="right", pady=(4, 0))
+        ttk.Label(win, text="输入框聚焦时，Del / Esc / 方向键仍归输入框，不会误删元素。",
+                  style="Muted.TLabel").pack(anchor="w", padx=20, pady=(0, 10))
+        tk.Frame(win, bg=CLR_BORDER, height=1).pack(fill="x")
+
+        body = tk.Frame(win, bg=CLR_PANEL)
+        body.pack(fill="both", expand=True, padx=20, pady=12)
+        for c in (0, 1):
+            body.grid_columnconfigure(c, weight=1, uniform="col")
+
+        def render(col_index, groups):
+            col = tk.Frame(body, bg=CLR_PANEL)
+            col.grid(row=0, column=col_index, sticky="new",
+                     padx=(0, 18) if col_index == 0 else 0)
+            col.grid_columnconfigure(0, weight=1)
+            r = 0
+            for gname in groups:
+                bar = tk.Frame(col, bg=CLR_PANEL)
+                bar.grid(row=r, column=0, columnspan=2, sticky="ew",
+                         pady=(12 if r else 0, 4))
+                mark = tk.Frame(bar, bg=CLR_ACCENT, width=3, height=11)
+                mark.pack(side="left", padx=(0, 6))
+                mark.pack_propagate(False)
+                ttk.Label(bar, text=gname, style="Section.TLabel").pack(side="left")
+                r += 1
+                for act in ACTIONS:
+                    if act["group"] != gname or not act.get("accel"):
+                        continue
+                    ttk.Label(col, text=act["label"], style="Panel.TLabel").grid(
+                        row=r, column=0, sticky="w", pady=2)
+                    tk.Label(col, text=act["accel"], font=("Consolas", 8),
+                             fg=CLR_TEXT, bg=U.SURFACE_SUNK, padx=7, pady=1).grid(
+                        row=r, column=1, sticky="e", padx=(10, 0))
+                    r += 1
+
+        render(0, ("文件", "编辑"))
+        render(1, ("视图", "设备", "帮助"))
+
+        tips = tk.Frame(win, bg=U.SURFACE_ALT, highlightbackground=CLR_BORDER,
+                        highlightthickness=1)
+        tips.pack(fill="x", padx=20, pady=(0, 14))
+        tk.Label(tips, text="画布上的鼠标与单键", bg=U.SURFACE_ALT, fg=CLR_TEXT,
+                 font=FONT_UI_B).pack(anchor="w", padx=12, pady=(8, 2))
+        tk.Label(tips, text="拖动元素移动 · 方向键微调 1px · Shift+方向键 10px · "
+                            "Ctrl+滚轮缩放 · 橙色方块拖起点 · 绿色圆圈拖目标点",
+                 bg=U.SURFACE_ALT, fg=CLR_MUTED, font=FONT_SMALL,
+                 justify="left", wraplength=640).pack(anchor="w", padx=12, pady=(0, 8))
+
+    def show_about(self):
+        win = U.prepare_window(tk.Toplevel(self), "关于", "470x340", self)
+        win.configure(bg=CLR_PANEL)
+        win.resizable(False, False)
+        tk.Label(win, text="ClockWise Canvas", bg=CLR_PANEL, fg=CLR_TEXT,
+                 font=(U.FAMILY, 16, "bold")).pack(anchor="w", padx=26, pady=(26, 0))
+        tk.Label(win, text="64 × 64 点阵钟主题编辑器   v%s" % APP_VER, bg=CLR_PANEL,
+                 fg=CLR_MUTED, font=FONT_UI).pack(anchor="w", padx=26, pady=(4, 14))
+        tk.Frame(win, bg=CLR_BORDER, height=1).pack(fill="x", padx=26)
+        body = ("预览与固件逐像素一致：字体、色彩、绘制顺序全部取自固件实现。\n\n"
+                "固件限制\n"
+                "· 主题 JSON ≤ 48 KB\n"
+                "· 单张图片解码后 ≤ 1024 B，宽 ≤ 64 px，且必须是 PNG\n"
+                "· 精灵组内各帧尺寸必须一致\n\n"
+                "上传后需要重启设备才生效。")
+        tk.Label(win, text=body, bg=CLR_PANEL, fg=CLR_MUTED, font=FONT_SMALL,
+                 justify="left").pack(anchor="w", padx=26, pady=14)
+        ttk.Button(win, text="关闭", style="Accent.TButton",
+                   command=win.destroy).pack(side="right", padx=26, pady=(0, 20))
 
     def on_close(self):
         if not self._confirm_discard():
@@ -2711,11 +3163,11 @@ setup 元素
   m-d  10-28      D, m/d  Wed, 10/28     A  PM
 
 固件硬限制（超了就是静默不显示）
-  主题 JSON      <= 16KB（DynamicJsonDocument(16384)）
-  单张图片 PNG   解码后 <= 4096 字节（IMAGE_BUFFER_SIZE），8-bit RGB/RGBA
+  主题 JSON      <= 48KB（DynamicJsonDocument(49152)）
+  单张图片 PNG   解码后 <= 1024 字节（IMAGE_BUFFER_SIZE）
   图片宽度       <= 64px（usPixels[64]）
   格式            必须是 PNG，JPG 不行
-  坐标            x/y 取 0..63（超出部分由屏幕裁剪）
+  坐标            x/y 取 uint8，0..255，屏幕只有 0..63
 
 颜色是 RGB565：
   value = ((R>>3)<<11) | ((G>>2)<<5) | (B>>3)

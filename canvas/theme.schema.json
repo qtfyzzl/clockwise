@@ -94,6 +94,13 @@
       "description": "画面坐标，0–63（含）"
     },
 
+    "moveCoord": {
+      "type": "integer",
+      "minimum": -1,
+      "maximum": 63,
+      "description": "移动目标坐标。**-1 表示未设置**（固件用 as<int8_t>() ?: -1 取默认值，此时不移动），0–63 为有效目标"
+    },
+
     "rgb565": {
       "type": "integer",
       "minimum": 0,
@@ -131,7 +138,7 @@
     "elemText": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "x", "y", "content", "font", "fgColor", "bgColor"],
+      "required": ["type", "x", "y", "content", "font", "fgColor"],
       "description": "静态文字元素",
       "properties": {
         "type": { "const": "text" },
@@ -147,7 +154,10 @@
           "description": "字体名。留空用默认；可用 picopixel / square / big / medium"
         },
         "fgColor": { "$ref": "#/$defs/rgb565" },
-        "bgColor": { "$ref": "#/$defs/rgb565" },
+        "bgColor": {
+          "allOf": [{ "$ref": "#/$defs/rgb565" }],
+          "description": "文字背景块颜色。**可省略**：省略时不画背景，直接叠在下一层上"
+        },
         "id": { "$ref": "#/$defs/elementId" },
         "comment": { "$ref": "#/$defs/note" }
       }
@@ -156,7 +166,7 @@
     "elemDatetime": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "content", "font", "fgColor", "bgColor", "x", "y"],
+      "required": ["type", "content", "font", "fgColor", "x", "y"],
       "description": "时间文字元素：content 用占位符表达时分秒，由固件替换为当前时间",
       "properties": {
         "type": { "const": "datetime" },
@@ -266,8 +276,8 @@
           "minimum": 0,
           "description": "移动持续时长（毫秒）"
         },
-        "moveTargetX": { "$ref": "#/$defs/coord" },
-        "moveTargetY": { "$ref": "#/$defs/coord" },
+        "moveTargetX": { "$ref": "#/$defs/moveCoord" },
+        "moveTargetY": { "$ref": "#/$defs/moveCoord" },
         "shouldReturnToOrigin": {
           "type": "boolean",
           "description": "到达目标后是否返回原位"

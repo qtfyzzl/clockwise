@@ -35,3 +35,9 @@ dist/_pylibs/
 clockwise-*.zip
 *.bak
 .git.bak/
+
+# 调试临时文件与系统导出（含 WiFi 配置导出，绝不上传）
+dist/_*.txt
+dist/_*.xml
+dist/_*.log
+*_wifi_*.xml

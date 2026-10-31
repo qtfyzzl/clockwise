@@ -19,6 +19,11 @@ dependencies.lock
 # 烧录产物：每个合并镜像 1.5MB 以上，可由 dist/flash.ps1 重新生成
 dist/*.bin
 dist/*.elf
+# 但 firmware.bin 是 flash.ps1 烧录的必需文件（缺失会报错退出），单独放行
+!dist/firmware.bin
+!dist/partitions.bin
+!dist/bootloader.bin
+!dist/boot_app0.bin
 
 # 编辑器打包输出与压缩包（11MB PyInstaller 产物，源码在 editor/ 下）
 editor/dist/

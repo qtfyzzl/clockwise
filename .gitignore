@@ -30,3 +30,8 @@ __pycache__/
 
 # 临时安装的 Python 依赖（验证工具用，不属于仓库）
 dist/_pylibs/
+
+# 分发用压缩包（可由源码重新打包，18MB 不入库）
+clockwise-*.zip
+*.bak
+.git.bak/

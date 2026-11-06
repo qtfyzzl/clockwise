@@ -24,8 +24,8 @@
 
 ```powershell
 cd dist
-.\flash.ps1                # 默认 COM6，波特率 460800
-.\flash.ps1 -Port COM8     # 指定串口
+.\flash.ps1                # 自动枚举串口，弹出选择（只有一个 USB 串口时自动选中）
+.\flash.ps1 -Port COM8     # 指定串口，跳过选择
 .\flash.ps1 -Baud 115200   # 线材差时降速
 ```
 
@@ -33,7 +33,7 @@ cd dist
 
 | 参数 | 作用 |
 |---|---|
-| `-Port COM8` | 指定串口（默认 COM6） |
+| `-Port COM8` | 指定串口；不填则自动枚举并选择（换电脑也适用） |
 | `-Baud 115200` | 降波特率，解决线材差导致的失败 |
 | `-Erase` | 整片擦除后再烧（会清空 WiFi 等设置） |
 | `-Merged` | 整片镜像一次烧入（救砖用） |

@@ -11,7 +11,7 @@
     无法自动进下载模式，脚本会提示操作员按住 BOOT 并自动重试。
 
 .PARAMETER Port
-    串口号，默认 COM6。
+    串口号，如 COM8。不填则自动枚举本机串口并交互式选择。
 
 .PARAMETER Erase
     烧录前整片擦除（会清空 NVS，WiFi 需重配）。
@@ -30,13 +30,16 @@
     .\flash.ps1
 
 .EXAMPLE
+    .\flash.ps1 -Port COM8        # 指定串口，跳过选择
+
+.EXAMPLE
     .\flash.ps1 -Erase          # 首次量产：整片擦除（需重配 WiFi）
 
 .EXAMPLE
     .\flash.ps1 -Merged         # 救砖：单文件烧到 0x0
 #>
 param(
-    [string]$Port    = "COM6",
+    [string]$Port    = "",
     [switch]$Erase,
     [switch]$Merged,
     [int]$Baud       = 460800,
@@ -46,6 +49,72 @@ param(
 # 原生程序（esptool）往 stderr 写错误时会触发 NativeCommandError，
 # 若用 "Stop" 会直接中断脚本。统一用 Continue，靠输出内容和 $LASTEXITCODE 判断。
 $ErrorActionPreference = "Continue"
+
+# ---------- 串口自动枚举与选择 ----------
+# 未通过 -Port 指定时，枚举本机串口让操作员挑一个。换电脑后 CH340 可能变成
+# COM3/COM4/COM5/COM8 等，写死默认值会在别的机器上直接烧错端口。
+function Get-SerialPorts {
+    # 优先用 WMI（PS5.1 无 Get-PnpDevice 的稳定串口过滤），列出名称含常见 USB 转串芯片
+    $ports = @()
+    try {
+        $ports = Get-CimInstance Win32_PnPEntity -ErrorAction Stop |
+            Where-Object { $_.Name -match '\(COM(\d+)\)' } |
+            ForEach-Object {
+                if ($_.Name -match '\(COM(\d+)\)') {
+                    [PSCustomObject]@{
+                        Port        = $Matches[1]
+                        DeviceName  = $_.Name
+                        IsUsbSerial = $_.Name -match 'CH34|CP210|FTDI|FT232|USB-SERIAL|USB Serial|Silicon Labs|CH910'
+                    }
+                }
+            }
+    } catch {
+        # 降级：用 .NET 枚举（仅能得到 COM 号，拿不到设备名）
+        try {
+            $ports = [System.IO.Ports.SerialPort]::GetPortNames() |
+                ForEach-Object {
+                    [PSCustomObject]@{ Port = ($_ -replace '[^\d]', ''); DeviceName = "未知设备 ($_)"; IsUsbSerial = $true }
+                }
+        } catch { }
+    }
+    return $ports | Sort-Object { [int]$_.Port }
+}
+
+if ([string]::IsNullOrWhiteSpace($Port)) {
+    $all = @(Get-SerialPorts)
+    if ($all.Count -eq 0) {
+        Write-Host "[!!] 未找到任何串口。" -ForegroundColor Red
+        Write-Host "     请确认开发板已插好 USB 数据线并安装了驱动。"
+        Write-Host "     也可手动指定： .\flash.ps1 -Port COM8"
+        exit 1
+    }
+
+    $usb = @($all | Where-Object { $_.IsUsbSerial })
+    if ($usb.Count -eq 1) {
+        # 只有一个 USB 转串口，直接选中
+        $Port = "COM$($usb[0].Port)"
+        Write-Host "[串口] 自动选中唯一 USB 串口：$Port（$($usb[0].DeviceName)）" -ForegroundColor Green
+    } else {
+        Write-Host ""
+        Write-Host "请选择烧录用的串口（输入序号后回车）：" -ForegroundColor Yellow
+        $list = if ($usb.Count -gt 0) { $usb } else { $all }
+        for ($i = 0; $i -lt $list.Count; $i++) {
+            $mark = if ($list[$i].IsUsbSerial) { "  <-- USB 转串口" } else { "" }
+            Write-Host ("  [{0}]  COM{1}  {2}{3}" -f ($i + 1), $list[$i].Port, $list[$i].DeviceName, $mark)
+        }
+        Write-Host ("  [{0}]  取消" -f ($list.Count + 1))
+
+        $choice = Read-Host "序号"
+        $idx = 0
+        if ([int]::TryParse($choice, [ref]$idx) -and $idx -ge 1 -and $idx -le $list.Count) {
+            $Port = "COM$($list[$idx - 1].Port)"
+        } else {
+            Write-Host "[!!] 已取消或输入无效。" -ForegroundColor Red
+            exit 1
+        }
+    }
+    Write-Host ""
+}
 
 $dist     = $PSScriptRoot
 $esptool  = Join-Path $env:USERPROFILE ".platformio\packages\tool-esptool\esptool.exe"

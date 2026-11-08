@@ -49,3 +49,6 @@ dist/_*.txt
 dist/_*.xml
 dist/_*.log
 *_wifi_*.xml
+
+# AI 助手工作记忆（含会话日志/项目笔记，属本地上下文，不进仓库）
+.workbuddy/

@@ -41,5 +41,17 @@ jobs:
 
       - name: Build firmware (esp32dev)
         run: |
-          pio run -d firmware/ -e esp32dev -v
+          set -o pipefail
+          pio run -d firmware/ -e esp32dev -v 2>&1 | tee /tmp/pio.log
         timeout-minutes: 20
+
+      - name: Report build errors
+        if: failure()
+        run: |
+          # 把关键错误用 ::error:: 前缀暴露到 GitHub annotations（可通过 API 读取）
+          grep -nE "error:|fatal:|unable to access|tunnel failed|Could not|VCSBaseException|undefined reference" /tmp/pio.log | head -20 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+          echo "--- 日志末尾 ---"
+          tail -30 /tmp/pio.log
+        timeout-minutes: 5

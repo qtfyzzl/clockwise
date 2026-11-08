@@ -41,5 +41,5 @@ jobs:
 
       - name: Build firmware (esp32dev)
         run: |
-          pio run -d firmware/ -e esp32dev
+          pio run -d firmware/ -e esp32dev -v
         timeout-minutes: 20

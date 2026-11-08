@@ -1,7 +1,12 @@
 @echo off
 setlocal enabledelayedexpansion
-set ESPTOOL=%USERPROFILE%\.platformio\packages\tool-esptool\esptool.exe
-set IMG=%~dp0clockwise-v1.4.4-mario-merged.bin
+REM 优先用脚本同目录自带的 esptool.exe（换电脑无需装 PlatformIO）
+if exist "%~dp0esptool.exe" (
+  set ESPTOOL=%~dp0esptool.exe
+) else (
+  set ESPTOOL=%USERPROFILE%\.platformio\packages\tool-esptool\esptool.exe
+)
+set IMG=%~dp0clockwise-ota-merged.bin
 set PORT=%1
 if "%PORT%"=="" set PORT=COM6
 set /a N=0

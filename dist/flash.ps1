@@ -117,8 +117,12 @@ if ([string]::IsNullOrWhiteSpace($Port)) {
 }
 
 $dist     = $PSScriptRoot
-$esptool  = Join-Path $env:USERPROFILE ".platformio\packages\tool-esptool\esptool.exe"
-$mergedBin = Join-Path $dist "clockwise-v1.4.4-mario-merged.bin"
+# esptool 优先用脚本同目录（dist）里自带的副本，这样换电脑无需安装 PlatformIO；
+# 本地没有才回退到用户目录下 PlatformIO 装的版本。
+$esptoolLocal = Join-Path $dist "esptool.exe"
+$esptoolUser  = Join-Path $env:USERPROFILE ".platformio\packages\tool-esptool\esptool.exe"
+$esptool  = if (Test-Path $esptoolLocal) { $esptoolLocal } else { $esptoolUser }
+$mergedBin = Join-Path $dist "clockwise-ota-merged.bin"
 $fBoot    = Join-Path $dist "bootloader.bin"
 $fParts   = Join-Path $dist "partitions.bin"
 $fOta     = Join-Path $dist "boot_app0.bin"
@@ -131,7 +135,7 @@ function Write-Err($m)  { Write-Host "[!!] $m" -ForegroundColor Red }
 # ---------- 前置检查 ----------
 if (-not (Test-Path $esptool)) {
     Write-Err "找不到 esptool: $esptool"
-    Write-Host "请先安装 PlatformIO，或修改脚本里的 `$esptool 路径。"
+    Write-Host "把 esptool.exe 放到本脚本同目录（dist），或安装 PlatformIO。"
     exit 1
 }
 
@@ -160,7 +164,7 @@ if ($useMerged) {
     Write-Step "  bootloader.bin -> 0x1000"
     Write-Step "  partitions.bin -> 0x8000"
     Write-Step "  boot_app0.bin  -> 0xe000"
-    Write-Step "  firmware.bin   -> 0x10000"
+    Write-Step "  firmware.bin   -> 0x10000（app0）+ 0x1E0000（app1）"
 }
 Write-Step "波特率   : $Baud"
 if ($Erase) { Write-Step "整片擦除 : 是（NVS/WiFi 会被清空）" } else { Write-Step "整片擦除 : 否" }
@@ -215,11 +219,14 @@ if ($Erase) {
 if ($useMerged) {
     $flashArgs = @("--baud", "$Baud", "write-flash", "-z", "0x0", $mergedBin)
 } else {
+    # 分段烧录同时写 app0(0x10000) 和 app1(0x1E0000)，避免设备从 app1 启动时
+    # 「烧了 app0 但画面不变」的分区错位问题（OTA 双分区，激活分区不定）。
     $flashArgs = @("--baud", "$Baud", "write-flash", "-z",
                    "0x1000", $fBoot,
                    "0x8000", $fParts,
                    "0xe000", $fOta,
-                   "0x10000", $fApp)
+                   "0x10000", $fApp,
+                   "0x1E0000", $fApp)
 }
 $r = Invoke-WithRetry -Label "写入固件" -ExtraArgs $flashArgs -SuccessPattern "Hash of data verified"
 if (-not $r) {
@@ -242,7 +249,7 @@ if ($useMerged) {
     $verifyArgs = @("--chip","esp32","--port",$Port,"--baud","$Baud","verify-flash","0x0",$mergedBin)
 } else {
     $verifyArgs = @("--chip","esp32","--port",$Port,"--baud","$Baud","verify-flash",
-                    "0x1000", $fBoot, "0x8000", $fParts, "0xe000", $fOta, "0x10000", $fApp)
+                    "0x1000", $fBoot, "0x8000", $fParts, "0xe000", $fOta, "0x10000", $fApp, "0x1E0000", $fApp)
 }
 
 $verifyOk = $false

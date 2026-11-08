@@ -1,33 +1,25 @@
 @echo off
 setlocal
-set ESPTOOL=%USERPROFILE%\.platformio\packages\tool-esptool\esptool.exe
-set IMG=%~dp0clockwise-v1.4.4-mario-merged.bin
 
-if "%1"=="" (
-  echo Usage: flash.bat COM5
-  echo.
-  echo Available ports:
-  echo   See Device Manager ^> Ports, or run: pio device list
-  exit /b 1
-)
+REM 薄包装：直接调用同目录的 flash.ps1（已含自动枚举串口、本地 esptool 回退、
+REM 分段烧录 firmware.bin 等完整逻辑）。参数透传给 ps1。
+REM
+REM 用法：
+REM   flash.bat             双击，自动找串口烧最新固件
+REM   flash.bat -Port COM8  指定串口
+REM   flash.bat -Erase      整片擦除（清空设置，需重配 WiFi）
+REM   flash.bat -Merged     烧合并镜像（救砖）
 
-if not exist "%ESPTOOL%" (
-  echo esptool not found at %ESPTOOL%
-  echo Install PlatformIO first, or edit ESPTOOL path in this file.
-  exit /b 1
-)
-
-echo Flashing %IMG% to %1 ...
-"%ESPTOOL%" --chip esp32 --port %1 --baud 921600 write-flash -z 0x0 "%IMG%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0flash.ps1" %*
 
 if errorlevel 1 (
   echo.
-  echo Flash FAILED. Try:
-  echo   1. Close any serial monitor holding the port
-  echo   2. Hold BOOT button while plugging in USB
-  echo   3. Lower baud rate to 460800
+  echo 烧录失败，见上方输出。
+  pause
   exit /b 1
 )
 
 echo.
-echo Done. Open serial monitor at 115200 to watch boot log.
+echo 完成。
+pause
+exit /b 0

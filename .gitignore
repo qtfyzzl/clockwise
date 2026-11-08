@@ -28,6 +28,9 @@ dist/*.elf
 # 编辑器打包输出与压缩包（11MB PyInstaller 产物，源码在 editor/ 下）
 editor/dist/
 editor.zip
+# 编辑器分发包（exe + 说明书，10.6MB exe 不入库）
+dist/ClockCanvasDesigner-*/
+*.exe
 
 # Python 缓存
 __pycache__/

@@ -10,6 +10,7 @@
 #include "PacmanClockface.h"
 #include "PacmanClockface.h"
 #include "CanvasClockface.h"
+#include "WinterGamesClockface.h"
 // Commons
 #include <WiFiController.h>
 #include <CWDateTime.h>
@@ -22,6 +23,7 @@
 // 本工程内聚模块
 #include "OfflineClock.h"
 #include "TimeStore.h"
+#include "CrashGuard.h"
 
 // 注：CLOCKFACE_NAME 宏已不再使用。主题引擎改为运行时由 NVS 的
 // clockfaceEngine 决定（见下方 engineClockfaceId），编译期常量会误导。
@@ -55,12 +57,14 @@ uint8_t currentBrightSlot = -1;
 // 引擎标识存在 NVS 的 clockfaceEngine 里，切换后重启生效。
 const char *ENGINE_NATIVE_MARIO = "native-mario";
 const char *ENGINE_NATIVE_PACMAN = "native-pacman";
+const char *ENGINE_NATIVE_WINTER = "native-wintergames";
 const char *ENGINE_CANVAS = "canvas";
 
 static const char *engineClockfaceId(const String &engine)
 {
   if (engine == ENGINE_NATIVE_MARIO) return "cw-cf-0x01";
   if (engine == ENGINE_NATIVE_PACMAN) return "cw-cf-0x05";
+  if (engine == ENGINE_NATIVE_WINTER) return "cw-cf-0x08";
   return "cw-cf-0x07";   // 其余一律走 Canvas
 }
 
@@ -70,7 +74,32 @@ static IClockface *createClockface(const String &engine, Adafruit_GFX *display)
     return new MarioClockface(display);
   if (engine == ENGINE_NATIVE_PACMAN)
     return new PacmanClockface(display);
+  if (engine == ENGINE_NATIVE_WINTER)
+    return new WinterGamesClockface(display);
   return new CanvasClockface(display);
+}
+
+// 主题 setup 的隔离包装：捕获 C++ 异常（如 new PNG() 时 std::bad_alloc）。
+// 说明：ESP32 的硬件 panic（空指针/堆越界）不会抛异常，会直接复位 ——
+// 那种情况靠 crashguard::detectCrash() 的计数回退兜底；这里兜的是
+// 「堆耗尽抛 bad_alloc」这类能被 catch 到的场景。
+static bool setupClockfaceSafely(IClockface *cf, CWDateTime *dt)
+{
+  try
+  {
+    cf->setup(dt);
+    return true;
+  }
+  catch (const std::bad_alloc &)
+  {
+    Serial.println("[App] 主题 setup 堆耗尽（bad_alloc），降级到原生时钟");
+    return false;
+  }
+  catch (...)
+  {
+    Serial.println("[App] 主题 setup 抛出异常，降级到原生时钟");
+    return false;
+  }
 }
 
 bool isValidI2SSpeed(uint32_t speed) {
@@ -265,7 +294,7 @@ void setup()
   Serial.begin(115200);
   pinMode(ESP32_LED_BUILTIN, OUTPUT);
 
-  StatusController::getInstance()->blink_led(5, 100);
+  StatusController::getInstance()->blink_led(2, 50);
 
   // 挂载 SPIFFS：给 Canvas 主题存本地 JSON 用（分区表 huge_app.csv 里预留 896KB）。
   //
@@ -286,6 +315,10 @@ void setup()
 
   ClockwiseParams::getInstance()->load();
 
+  // 防卡死：先看这次启动是不是「崩溃后复位」，是的话累加计数，
+  // 连续崩溃达阈值就自动回退到内置原生时钟，打破「坏主题 → 无限重启」的死循环。
+  crashguard::detectCrash();
+
   // 主题引擎由 NVS 决定，不再是编译期常量
   const String engine = ClockwiseParams::getInstance()->clockfaceEngine;
   ClockwiseWebServer::getInstance()->clockfaceName = engineClockfaceId(engine);
@@ -293,7 +326,8 @@ void setup()
   ClockwiseWebServer::getInstance()->engineCatalog =
       "canvas|画布模式（Canvas）\n"
       "native-mario|Mario（原生）\n"
-      "native-pacman|吃豆人（原生）\n";
+      "native-pacman|吃豆人（原生）\n"
+      "native-wintergames|长春大冬会（原生）\n";
   Serial.printf("[App] 主题引擎: %s（对应 %s）\n", engine.c_str(), engineClockfaceId(engine));
 
   // 尽早恢复时间：没有网络时系统时间是 1970，离线页面就只能显示 --:--
@@ -311,7 +345,7 @@ void setup()
   autoBrightEnabled = (ClockwiseParams::getInstance()->autoBrightMax > 0);
 
   StatusController::getInstance()->clockwiseLogo();
-  delay(1000);
+  delay(400);
 
   StatusController::getInstance()->wifiConnecting();
   wifi.begin(); // non-blocking; provisioning continues in loop()
@@ -432,7 +466,7 @@ void onNetworkReady()
       ClockwiseParams::getInstance()->manualPosix.c_str());
 
   showIpSplash();
-  delay(5000);   // 停 5 秒让人看清，然后主题接管
+  delay(2500);   // 停 2.5 秒让人看清 IP，然后主题接管
 
   // 关键诊断：maxAlloc 是「堆里最大的连续块」，网络能不能工作看的正是它，
   // 而不是 free。48KB JSON 缓冲那次就是 free 还有 108KB、但 maxAlloc 不够了。
@@ -444,7 +478,14 @@ void onNetworkReady()
   // 那样 Canvas 会去远程拉、超时后停在报错页。这里直接回退到任意一个本地主题。
   ensureCanvasFileExists();
 
-  clockface->setup(&cwDateTime);
+  // 主题 setup 隔离：捕获异常，失败时降级到内置原生时钟，避免卡死。
+  if (!setupClockfaceSafely(clockface, &cwDateTime))
+  {
+    delete clockface;
+    clockface = createClockface(ENGINE_NATIVE_MARIO, dma_display);
+    ClockwiseParams::getInstance()->clockfaceEngine = ENGINE_NATIVE_MARIO;
+    clockface->setup(&cwDateTime);
+  }
 
   // 链路质量诊断：RSSI 太差（>-75dBm 说明信号很弱）时，网页再怎么优化都慢
   setupOTA();
@@ -494,4 +535,8 @@ void loop()
 
   automaticBrightControl();
   time_store::saveIfDue();
+
+  // 防卡死：主题真正加载并稳定运行一段后，清零崩溃计数。
+  // 只有跑到这里说明 setup + 主题 update 都正常，本次启动是健康的。
+  crashguard::markStable();
 }

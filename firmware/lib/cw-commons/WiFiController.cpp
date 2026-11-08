@@ -81,6 +81,20 @@ void WiFiController::startApPortal()
   StatusController::getInstance()->wifiConnectionFailed("Setup WiFi via AP");
 
   WiFiManager &wm = wifiManager();
+  // 关键：启动配网页前先断开 STA 并只保留 AP。
+  //
+  // 现象是「开机时能搜到 WiFi，运行一段时间后扫不到」：
+  //   WiFiManager 默认 _disableSTAConn=true 只在「STA 未连接」时关 STA。
+  //   开机时 STA 还没连上 → 会关 → 扫描正常。
+  //   但运行一段时间后（STA 已关联、或处于半关联悬挂状态）再进配网，
+  //   WiFi.isConnected() 仍返回真，于是不关 STA；而 ESP32 在 STA 已关联时
+  //   无法正常做 AP 模式的信道扫描，结果就是配网页扫不到任何网络。
+  //
+  // 这里显式切到纯 AP + 断开 STA，让扫描恢复。配网结束后 onConnected() 会
+  // 重新连 STA，不影响正常使用。
+  WiFi.disconnect(true);   // 断开并清除自动重连，避免 STA 抢占信道
+  WiFi.mode(WIFI_AP);
+
   wm.setConfigPortalBlocking(false);
   wm.setConfigPortalTimeout(0); // timeout is owned by WiFiSetupStateMachine
   wm.startConfigPortal("Clockwise-Wifi");

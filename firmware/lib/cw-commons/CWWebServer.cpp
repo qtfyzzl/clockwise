@@ -314,9 +314,19 @@ void ClockwiseWebServer::applySetting(const String &key, const String &value)
   ClockwiseParams *p = ClockwiseParams::getInstance();
   p->load();
 
-  if (key == p->PREF_DISPLAY_BRIGHT)
-    p->displayBright = value.toInt();
-  else if (key == p->PREF_WIFI_SSID)
+    if (key == p->PREF_DISPLAY_BRIGHT)
+    {
+      // 亮度必须钳位：displayBright 是 uint8_t，toInt() 出负值或 >255 会回绕。
+      // 更严重的是高亮度会抽干 5V 电源（实测 200 附近就掉电重启），
+      // 所以上限压到 DISPLAY_BRIGHT_MAX，前端滑条也同步这个上限。
+      int32_t b = value.toInt();
+      if (b < 0) b = 0;
+      if (b > DISPLAY_BRIGHT_MAX) b = DISPLAY_BRIGHT_MAX;
+      p->displayBright = (uint8_t)b;
+      Serial.printf("[Cfg] 亮度 -> %u（已钳位到 0..%u）\n",
+                    (unsigned)p->displayBright, (unsigned)DISPLAY_BRIGHT_MAX);
+    }
+    else if (key == p->PREF_WIFI_SSID)
     p->wifiSsid = value;
   else if (key == p->PREF_WIFI_PASSWORD)
     p->wifiPwd = value;

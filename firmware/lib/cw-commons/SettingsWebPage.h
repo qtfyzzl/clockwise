@@ -224,6 +224,10 @@ function requestGet(path, cb){
 
 // 注意：服务端不做 URL 解码，值必须原样拼接（不能 encodeURIComponent）
 function setPref(key, value){
+  // 写 NVS 成功后同步本地 S 缓存：否则界面上的「使用中」标记、滑条当前值
+  // 还停留在旧值（尤其引擎切换，不重启时 renderEngineList 会读旧缓存）。
+  var k = key.toLowerCase();
+  S[k] = value;
   qrun(function(done){
     var xhr = new XMLHttpRequest();
     xhr.onreadystatechange = function(){
@@ -557,6 +561,9 @@ function pickEngine(id){
   if (id === (S['clockfaceengine'] || 'canvas')) return;
   if (!confirm('切换到「' + id + '」需要重启设备，确定？')) return;
   setPref('clockfaceEngine', id);
+  // setPref 已同步 S 缓存，这里立即重渲染，让「使用中」标记立刻移到新引擎，
+  // 即使下面用户取消重启，界面也不会停留在旧模式。
+  renderEngineList();
   setTimeout(function(){
     if (confirm('已切换，现在重启生效？')) restartDevice();
   }, 700);
@@ -702,8 +709,8 @@ function render(){
   html += '<div class="group"><h2>显示</h2><span>亮度、自动亮度、屏幕方向、刷新率</span></div><div class="grid">';
 
   html += card('屏幕亮度',
-    '范围 0–255。<code>0</code> 等于关屏，<code>255</code> 最亮。亮度越高耗电越大，电源不足时会出现闪烁。',
-    '<input type="range" id="bright" min="0" max="255" value="' + esc(bright) + '" ' +
+    '范围 0–180。<code>0</code> 等于关屏，<code>180</code> 最亮。亮度越高耗电越大，超过 180 可能因电源不足导致死机重启。',
+    '<input type="range" id="bright" min="0" max="180" value="' + esc(bright) + '" ' +
     'oninput="document.getElementById(\'brightVal\').textContent=this.value">' +
     '<span class="val" id="brightVal">' + esc(bright) + '</span>',
     "setPref('displayBright', document.getElementById('bright').value)");

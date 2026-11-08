@@ -89,16 +89,25 @@ void CanvasClockface::renderText(String text, JsonVariantConst value)
 
   Locator::getDisplay()->getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
 
-  // BG Color
-  Locator::getDisplay()->fillRect(
-      value["x"].as<const uint16_t>() + x1,
-      value["y"].as<const uint16_t>() + y1,
-      w,
-      h,
-      value["bgColor"].as<const uint16_t>());
+  // 坐标用 as<int>() 再相加：x1/y1 是字形相对基线的偏移，可能为负。
+  // 旧写法 as<const uint16_t>() + x1 会把负数带进无符号运算，最后截断成 int16_t，
+  // 表面上没错但边界情况会算飞。
+  const int16_t px = (int16_t)(value["x"].as<int>() + x1);
+  const int16_t py = (int16_t)(value["y"].as<int>() + y1);
 
-  Locator::getDisplay()->setTextColor(value["fgColor"].as<const uint16_t>());
-  Locator::getDisplay()->setCursor(value["x"].as<const uint16_t>(), value["y"].as<const uint16_t>());
+  // 元素没写 bgColor 时退回主题背景色。
+  // 旧写法 as<const uint16_t>() 对缺失的键返回 0，在非黑底主题上会擦出一块黑。
+  uint16_t bg = doc["bgColor"].as<uint16_t>();
+  if (!value["bgColor"].isNull())
+    bg = value["bgColor"].as<uint16_t>();
+
+  uint16_t fg = 0xFFFF;
+  if (!value["fgColor"].isNull())
+    fg = value["fgColor"].as<uint16_t>();
+
+  Locator::getDisplay()->fillRect(px, py, w, h, bg);
+  Locator::getDisplay()->setTextColor(fg);
+  Locator::getDisplay()->setCursor(value["x"].as<int>(), value["y"].as<int>());
   Locator::getDisplay()->print(text);
 }
 
@@ -106,6 +115,8 @@ void CanvasClockface::refreshDateTime()
 {
 
   JsonArrayConst elements = doc["setup"].as<JsonArrayConst>();
+  uint8_t slot = 0;
+
   for (JsonVariantConst value : elements)
   {
     const char *type = value["type"].as<const char *>();
@@ -114,7 +125,50 @@ void CanvasClockface::refreshDateTime()
 
     if (strcmp(type, "datetime") == 0)
     {
-      renderText(_dateTime->getFormattedTime(value["content"].as<const char *>()), value);
+      const String text = _dateTime->getFormattedTime(value["content"].as<const char *>());
+
+      // 先把这次「要画在哪、多大」算出来（和 renderText 用同一套算法），
+      // 才能判断是不是真的需要重绘。
+      setFont(value["font"].as<const char *>());
+      int16_t x1, y1;
+      uint16_t w, h;
+      Locator::getDisplay()->getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+      const int16_t px = (int16_t)(value["x"].as<int>() + x1);
+      const int16_t py = (int16_t)(value["y"].as<int>() + y1);
+
+      DateTimeSlot &c = _dtSlots[slot < DT_SLOT_MAX ? slot : DT_SLOT_MAX - 1];
+      slot++;
+
+      // 内容、位置、包围盒全都没变 → 一个像素都不写。
+      //
+      // 这就是「时间区域每秒闪一下」的解药：update() 每秒都会进来，
+      // 旧代码在这里无条件 renderText()，等于每秒把时间区擦掉重画一次。
+      // H:i 一分钟才变一次，99% 的刷新都是纯白干，还给单缓冲面板制造了撕裂。
+      if (c.drawn && text == c.text && px == c.x && py == c.y &&
+          w == c.w && h == c.h)
+        continue;
+
+      // 文本变短时（"10:05" → "9:05"），新包围盒盖不住旧包围盒，
+      // 旧字右侧会残留。先按旧矩形擦一遍再画新的。
+      uint16_t bg = doc["bgColor"].as<uint16_t>();
+      if (!value["bgColor"].isNull())
+        bg = value["bgColor"].as<uint16_t>();
+
+      const bool covers =
+          (px <= c.x) && (py <= c.y) &&
+          ((int32_t)px + w >= (int32_t)c.x + c.w) &&
+          ((int32_t)py + h >= (int32_t)c.y + c.h);
+      if (c.drawn && !covers)
+        Locator::getDisplay()->fillRect(c.x, c.y, c.w, c.h, bg);
+
+      renderText(text, value);
+
+      c.text = text;
+      c.x = px;
+      c.y = py;
+      c.w = w;
+      c.h = h;
+      c.drawn = true;
     }
   }
 }
@@ -126,6 +180,12 @@ void CanvasClockface::clockfaceSetup()
   Locator::getDisplay()->fillRect(0, 0, 64, 64, doc["bgColor"].as<const uint16_t>());
 
   delay = doc["delay"].as<const uint16_t>();
+
+  // 刚刚清过屏，之前的绘制已经不存在了，缓存必须一起清。
+  // 不清的话，如果上电时内容恰好等于缓存里的值，会被判定"已画过"而跳过，
+  // 屏幕上就是一块空白。
+  for (uint8_t i = 0; i < DT_SLOT_MAX; i++)
+    _dtSlots[i].reset();
 
   // Draw static elements
   renderElements(doc["setup"].as<JsonArrayConst>());
@@ -163,7 +223,7 @@ void CanvasClockface::createSprites()
   }
 }
 
-void CanvasClockface::handleSpriteAnimation(std::shared_ptr<CustomSprite>& sprite) {
+bool CanvasClockface::handleSpriteAnimation(std::shared_ptr<CustomSprite>& sprite) {
     // 一次性诊断：把精灵的实际参数打出来，出问题时不用再靠猜
     static bool spriteInfoLogged = false;
     if (!spriteInfoLogged) {
@@ -180,7 +240,7 @@ void CanvasClockface::handleSpriteAnimation(std::shared_ptr<CustomSprite>& sprit
 
     JsonArrayConst frames = doc["sprites"][sprite->_spriteReference].as<JsonArrayConst>();
     if (frames.isNull() || frames.size() == 0)
-        return;   // sprite 引用越界或空帧组
+        return false;   // sprite 引用越界或空帧组
 
     const uint16_t totalFrames = frames.size();
     sprite->_totalFrames = totalFrames > 255 ? 255 : totalFrames;
@@ -192,6 +252,8 @@ void CanvasClockface::handleSpriteAnimation(std::shared_ptr<CustomSprite>& sprit
     uint16_t frameDelay = doc["loop"][sprite->_spriteReference]["frameDelay"].as<uint16_t>() ?: delay;
     if (frameDelay == 0) frameDelay = 50;   // 0 会让动画每次循环都触发，白烧 CPU
 
+    bool frameChanged = false;
+
     if (millis() - sprite->_lastMillisSpriteFrames >= frameDelay && sprite->_currentFrameCount < totalFrames) {
         sprite->incFrame();
 
@@ -199,16 +261,9 @@ void CanvasClockface::handleSpriteAnimation(std::shared_ptr<CustomSprite>& sprit
         if (sprite->_currentFrame >= totalFrames)
             sprite->_currentFrame = 0;
 
-        // handle sprite movement
-        handleSpriteMovement(sprite);
-
-        // Render the frame of the sprite
-        const char *img = frames[sprite->_currentFrame]["image"].as<const char *>();
-        if (img != nullptr)
-            renderImage(img, sprite->getX(), sprite->getY());
-
         sprite->_currentFrameCount += 1;
         sprite->_lastMillisSpriteFrames = millis();
+        frameChanged = true;
     }
 
     // loopDelay 是「帧计数重置周期」，不是「播完后再停多久」——这个区别很重要：
@@ -224,9 +279,11 @@ void CanvasClockface::handleSpriteAnimation(std::shared_ptr<CustomSprite>& sprit
         sprite->_currentFrameCount = 0;
         sprite->_lastResetTime = millis();
     }
+
+    return frameChanged;
 }
 
-void CanvasClockface::handleSpriteMovement(std::shared_ptr<CustomSprite>& sprite) {
+bool CanvasClockface::handleSpriteMovement(std::shared_ptr<CustomSprite>& sprite) {
     unsigned long moveStartTime = doc["loop"][sprite->_spriteReference]["moveStartTime"].as<unsigned long>() ?: 1;
     unsigned long moveDuration = doc["loop"][sprite->_spriteReference]["moveDuration"].as<unsigned long>() ?: 0;
     int8_t moveInitialX = doc["loop"][sprite->_spriteReference]["x"].as<int8_t>() ?:0;
@@ -234,6 +291,8 @@ void CanvasClockface::handleSpriteMovement(std::shared_ptr<CustomSprite>& sprite
     int8_t moveTargetX = doc["loop"][sprite->_spriteReference]["moveTargetX"].as<int8_t>() ?: -1;
     int8_t moveTargetY = doc["loop"][sprite->_spriteReference]["moveTargetY"].as<int8_t>() ?: -1;
     bool shouldReturnToOrigin = doc["loop"][sprite->_spriteReference]["shouldReturnToOrigin"].as<bool>() ?: false;
+
+    bool moved = false;
 
     // Check if the sprite is moving
     if (sprite->isMoving()) {
@@ -245,46 +304,71 @@ void CanvasClockface::handleSpriteMovement(std::shared_ptr<CustomSprite>& sprite
         int8_t oldY = sprite->getY();
         int8_t newX = sprite->lerp(sprite->_moveInitialX, sprite->_moveTargetX, progress);
         int8_t newY = sprite->lerp(sprite->_moveInitialY, sprite->_moveTargetY, progress);
-        int8_t originX = min(oldX, newX);
-        int8_t originY = min(oldY, newY);
-        int8_t drawWidth = sprite->getWidth() + max(oldX, newX) - originX;
-        int8_t drawHeight = sprite->getHeight() + max(oldY, newY) - originY;
 
-        // Erase the previous position
-        Locator::getDisplay()->fillRect(
-            originX,
-            originY,
-            drawWidth,
-            drawHeight,
-            doc["bgColor"].as<const uint16_t>());
+        if (progress > 1.0f) {           // 到点：钉在目标位
+            newX = sprite->_moveTargetX;
+            newY = sprite->_moveTargetY;
+        }
 
-        if (progress <= 1) {
-            // Update the sprite's position
+        if (newX != oldX || newY != oldY) {
+            // 擦掉旧位置与新位置的并集（int16_t 防止 64+63=127 卡在 int8_t 上界）
+            int16_t originX = min(oldX, newX);
+            int16_t originY = min(oldY, newY);
+            int16_t drawWidth = sprite->getWidth() + max(oldX, newX) - originX;
+            int16_t drawHeight = sprite->getHeight() + max(oldY, newY) - originY;
+
+            // Erase the previous position
+            Locator::getDisplay()->fillRect(
+                originX,
+                originY,
+                drawWidth,
+                drawHeight,
+                doc["bgColor"].as<const uint16_t>());
+
             sprite->setX(newX);
             sprite->setY(newY);
+            moved = true;
+        }
 
-        } else if (sprite->shouldReturnToOrigin()) {
-            // Movement is complete
-            sprite->setX(sprite->_moveTargetX);
-            sprite->setY(sprite->_moveTargetY);
-
-            if (!sprite->_isReversing) {
-                sprite->reverseMoving(moveInitialX, moveInitialY);
+        // 到点后的状态切换。
+        // 注意：这里必须读 sprite->shouldReturnToOrigin()（即 _shouldReturnToOrigin），
+        // 不能读 JSON 里的 shouldReturnToOrigin —— reverseMoving() 会把
+        // _shouldReturnToOrigin 置 false，回程走完时靠它走到 stopMoving()，
+        // 否则会无限往返。
+        if (progress > 1.0f) {
+            if (sprite->shouldReturnToOrigin()) {
+                if (!sprite->_isReversing) {
+                    sprite->reverseMoving(moveInitialX, moveInitialY);  // 回程目标 = JSON 起点
+                }
+            } else {
+                sprite->stopMoving();
             }
-        } else {
-            sprite->stopMoving();
         }
     }
 
-    if ((moveDuration > 0 && (moveTargetX > -1 || moveTargetY > -1)) && (millis() - sprite->_lastResetMoveTime >= moveStartTime)) {
-        unsigned long currentMillis = millis();
-        unsigned long currentSecond = _dateTime->getSecond();
-
-        if ((currentSecond * 1000) % moveStartTime == 0) {
-            sprite->_lastResetMoveTime = currentMillis;
-            sprite->startMoving(moveTargetX, moveTargetY, moveDuration, shouldReturnToOrigin);
-        }
+    // 触发下一次位移：只在上一次彻底结束后才计时（加 !isMoving()），
+    // 否则往返动画的回程会被下一个周期打断、拽回终点。
+    //
+    // 原实现还有一层 `(currentSecond * 1000) % moveStartTime == 0`，
+    // 它把触发时机绑在整秒上，moveStartTime=3500 会变成 7 秒才触发一次，
+    // 与之前修掉的 loopDelay 取模 bug 同源。已删除：只看纯时长。
+    if (!sprite->isMoving()
+        && moveDuration > 0 && (moveTargetX > -1 || moveTargetY > -1)
+        && (millis() - sprite->_lastResetMoveTime >= moveStartTime)) {
+        sprite->_lastResetMoveTime = millis();
+        sprite->startMoving(moveTargetX, moveTargetY, moveDuration, shouldReturnToOrigin);
     }
+
+    return moved;
+}
+
+void CanvasClockface::renderSpriteFrame(std::shared_ptr<CustomSprite>& sprite) {
+    JsonArrayConst frames = doc["sprites"][sprite->_spriteReference].as<JsonArrayConst>();
+    if (frames.isNull() || sprite->_currentFrame >= frames.size())
+        return;
+    const char *img = frames[sprite->_currentFrame]["image"].as<const char *>();
+    if (img != nullptr)
+        renderImage(img, sprite->getX(), sprite->getY());
 }
 
 void CanvasClockface::clockfaceLoop() {
@@ -293,7 +377,14 @@ void CanvasClockface::clockfaceLoop() {
     }
 
     for (auto& sprite : sprites) {
-        handleSpriteAnimation(sprite);
+        bool frameChanged = handleSpriteAnimation(sprite);
+        bool moved        = handleSpriteMovement(sprite);
+
+        // 位移时位置变了要重画；只换帧时也要覆盖一次。
+        // handleSpriteMovement 已负责擦旧位置，这里只画新位置，不会残影。
+        if (moved || frameChanged) {
+            renderSpriteFrame(sprite);
+        }
     }
 }
 

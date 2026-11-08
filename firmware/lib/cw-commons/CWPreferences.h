@@ -6,6 +6,15 @@
     #define CW_PREF_DB_NAME "clockwise"
 #endif
 
+// 手动亮度的安全上限。
+// 面板库注释提示 64 宽面板在 >239 时开始鬼影，但更早的约束是电源：
+// 5V 全亮度点阵瞬间电流可超过 3A 电源能力，电压跌落触发 ESP32 掉电重启
+// （表现就是「调高亮度死机」，实测 200 附近就中招）。所以这里取 180，
+// 给不同批次的电源留余量。自动亮度同样以它封顶。
+#ifndef DISPLAY_BRIGHT_MAX
+    #define DISPLAY_BRIGHT_MAX 180
+#endif
+
 
 struct ClockwiseParams
 {
@@ -33,7 +42,13 @@ struct ClockwiseParams
     const char* const PREF_DISPLAY_ROTATION = "displayRotation";
     const char* const PREF_DRIVER = "driver";
     const char* const PREF_I2CSPEED = "i2cSpeed";
-    const char* const PREF_E_PIN = "E_pin";    
+    const char* const PREF_E_PIN = "E_pin";
+    // 防卡死：连续崩溃计数。panic/brownout 复位时 +1，稳定运行后清零。
+    // 连续崩溃 >= 3 次时回退到内置原生时钟（避免某个坏主题导致无限重启）。
+    const char* const PREF_CRASH_COUNT = "crashCount";
+    // 上一次崩溃时的主题引擎 + 文件名，用于回退后在设置页提示用户「原主题已隔离」。
+    const char* const PREF_CRASHED_ENGINE = "crashedEngine";
+    const char* const PREF_CRASHED_FILE = "crashedFile";    
 
     bool swapBlueGreen;
     bool swapBlueRed;
@@ -63,7 +78,11 @@ struct ClockwiseParams
     uint8_t displayRotation;
     uint8_t driver;
     uint32_t i2cSpeed;
-    uint8_t E_pin; 
+    uint8_t E_pin;
+    // 防卡死：连续崩溃计数
+    uint8_t crashCount;
+    String crashedEngine;
+    String crashedFile;
 
     ClockwiseParams() {
         preferences.begin("clockwise", false); 
@@ -110,6 +129,9 @@ struct ClockwiseParams
         preferences.putUInt(PREF_DRIVER, driver);
         preferences.putUInt(PREF_I2CSPEED, i2cSpeed);
         preferences.putUInt(PREF_E_PIN, E_pin);
+        preferences.putUChar(PREF_CRASH_COUNT, crashCount);
+        preferences.putString(PREF_CRASHED_ENGINE, crashedEngine);
+        preferences.putString(PREF_CRASHED_FILE, crashedFile);
     }
 
     void load()
@@ -118,6 +140,9 @@ struct ClockwiseParams
         swapBlueRed = preferences.getBool(PREF_SWAP_BLUE_RED, false);
         use24hFormat = preferences.getBool(PREF_USE_24H_FORMAT, true);
         displayBright = preferences.getUInt(PREF_DISPLAY_BRIGHT, 32);
+        // 读出来也要钳位：NVS 里可能残留旧固件存下的超限值（>180 曾导致高亮度掉电重启）
+        if (displayBright > DISPLAY_BRIGHT_MAX)
+            displayBright = DISPLAY_BRIGHT_MAX;
         autoBrightMin = preferences.getUInt(PREF_DISPLAY_ABC_MIN, 0);
         // 默认开启自动亮度：0 = 关闭（见 main.cpp 的 autoBrightEnabled）。
         // 800 是上游 wiki 在 GL5539 + 10k 分压下的实测推荐值：
@@ -143,6 +168,9 @@ struct ClockwiseParams
         driver = preferences.getUInt(PREF_DRIVER, 0);
         i2cSpeed = preferences.getUInt(PREF_I2CSPEED, (uint32_t)8000000);
         E_pin = preferences.getUInt(PREF_E_PIN, 18);
+        crashCount = preferences.getUChar(PREF_CRASH_COUNT, 0);
+        crashedEngine = preferences.getString(PREF_CRASHED_ENGINE, "");
+        crashedFile = preferences.getString(PREF_CRASHED_FILE, "");
     }
 
 };

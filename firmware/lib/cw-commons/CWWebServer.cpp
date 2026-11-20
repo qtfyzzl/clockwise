@@ -4,8 +4,7 @@
 
 #include <Arduino.h>
 #include "StatusController.h"
-#include "SettingsWebPage.h"
-#include "SettingsWebPage_gz.h"   // 由 tools/gzip_page.py 生成
+#include "SettingsWebPage_gz.h"   // 由 tools/gzip_page.py 生成（未压缩版 SettingsWebPage.h 仅作生成源，不再编译进固件）
 
 namespace
 {

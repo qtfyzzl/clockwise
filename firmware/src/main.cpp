@@ -466,7 +466,11 @@ void onNetworkReady()
       ClockwiseParams::getInstance()->manualPosix.c_str());
 
   showIpSplash();
-  delay(2500);   // 停 2.5 秒让人看清 IP，然后主题接管
+  // 注意：这里绝不能 delay() 阻塞主循环。连接成功的这一刻，用户很可能
+  // 正急着打开设置页（192.168.x.x），而 handleHttpRequest() 和它共享同一个
+  // loop()。一旦 delay 几秒，浏览器访问 IP 会完全无响应，表现为「WiFi 连上了
+  // 但配置页进不去」。IP splash 会一直显示到下面主题 setup 完成接管，
+  // 那本身就是几百毫秒的耗时，足够看清 IP，不需要额外 delay。
 
   // 关键诊断：maxAlloc 是「堆里最大的连续块」，网络能不能工作看的正是它，
   // 而不是 free。48KB JSON 缓冲那次就是 free 还有 108KB、但 maxAlloc 不够了。

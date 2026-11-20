@@ -433,16 +433,27 @@ function previewTheme(name){
 
   // 画一帧：背景 + setup 里的元素
   function paint(spec){
-    ctx.fillStyle = rgb565(spec.bgColor || 0);
-    ctx.fillRect(0, 0, 64, 64);
-    (spec.setup || []).forEach(function(el){ drawEl(el, ctx); });
+    if (!spec || typeof spec !== 'object') {
+      if (info) info.textContent = '主题结构异常，无法预览';
+      return;
+    }
+    try {
+      ctx.fillStyle = rgb565(spec.bgColor || 0);
+      ctx.fillRect(0, 0, 64, 64);
+      var setup = Array.isArray(spec.setup) ? spec.setup : [];
+      setup.forEach(function(el){ drawEl(el, ctx); });
 
-    var nsp = (spec.sprites || []).length;
-    var nloop = (spec.loop || []).length;
-    if (info) {
-      info.innerHTML = '<b>' + esc(spec.name || name) + '</b>' +
-        '<br>版本 ' + esc(spec.version || '?') + ' · 作者 ' + esc(spec.author || '?') +
-        '<br>' + (spec.setup || []).length + ' 个静态元素 · ' + nsp + ' 组精灵 · ' + nloop + ' 个动画';
+      var nsp = (Array.isArray(spec.sprites) ? spec.sprites.length : 0);
+      var nloop = (Array.isArray(spec.loop) ? spec.loop.length : 0);
+      if (info) {
+        info.innerHTML = '<b>' + esc(spec.name || name) + '</b>' +
+          '<br>版本 ' + esc(spec.version || '?') + ' · 作者 ' + esc(spec.author || '?') +
+          '<br>' + setup.length + ' 个静态元素 · ' + nsp + ' 组精灵 · ' + nloop + ' 个动画';
+      }
+    } catch (e) {
+      // 单个元素结构异常（缺字段、类型错）不该让整个页面崩掉，
+      // 只降级为「预览失败」提示。
+      if (info) info.textContent = '预览失败：主题字段异常';
     }
   }
 

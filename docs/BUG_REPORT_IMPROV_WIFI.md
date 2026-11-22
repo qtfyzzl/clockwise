@@ -49,11 +49,11 @@ flowchart LR
    * By default, it imposes a **10-second timeout** (`new_install_improv_wait_time`) for the device to announce its boot state.
    * Compares the reported device firmware name against `manifest.json` (`checkSameFirmware`). If it detects no response or a mismatch, it treats the device as unprovisioned/foreign and shows only `INSTALL` and `LOGS & CONSOLE`.
 
-2. **Improv Wi-Fi Serial ([`ImprovWiFiLibrary`](firmware/lib/cw-commons/WiFiController.h))**:
+2. **Improv Wi-Fi Serial ([`ImprovWiFiLibrary`](../firmware/lib/cw-commons/WiFiController.h))**:
    * Packet-based RPC protocol running over hardware UART (`Serial`).
    * Requires continuous polling via `improvSerial.handleSerial()` to read incoming bytes from the UART buffer, parse commands, and send replies.
 
-3. **Clockwise System Lifecycle ([`main.cpp`](firmware/src/main.cpp) & [`WiFiController.h`](firmware/lib/cw-commons/WiFiController.h))**:
+3. **Clockwise System Lifecycle ([`main.cpp`](../firmware/src/main.cpp) & [`WiFiController.h`](../firmware/lib/cw-commons/WiFiController.h))**:
    * `setup()` loads settings, initializes the HUB75 DMA matrix display, and calls `wifi.begin()`.
    * `loop()` services `wifi.handleImprovWiFi()`, HTTP server requests, NTP events, and clockface rendering.
 
@@ -64,7 +64,7 @@ flowchart LR
 ### Root Cause 1: Execution Deadlock in `setup()` Starves Improv Serial
 
 #### The Code Path
-In [`firmware/src/main.cpp`](firmware/src/main.cpp):
+In [`firmware/src/main.cpp`](../firmware/src/main.cpp):
 ```cpp
 void setup()
 {
@@ -83,7 +83,7 @@ void loop()
 }
 ```
 
-In [`firmware/lib/cw-commons/WiFiController.h`](firmware/lib/cw-commons/WiFiController.h):
+In [`firmware/lib/cw-commons/WiFiController.h`](../firmware/lib/cw-commons/WiFiController.h):
 ```cpp
 bool begin()
 {
@@ -152,11 +152,11 @@ According to the [ESP-Web-Tools documentation](https://esphome.github.io/esp-web
    }
    ```
 2. **Firmware Identity in Code**:
-   In [`firmware/platformio.ini`](firmware/platformio.ini):
+   In [`firmware/platformio.ini`](../firmware/platformio.ini):
    ```ini
    -D CW_FW_NAME="\"${sysenv.FW_NAME}\""
    ```
-   In [`WiFiController.h`](firmware/lib/cw-commons/WiFiController.h):
+   In [`WiFiController.h`](../firmware/lib/cw-commons/WiFiController.h):
    ```cpp
    improvSerial.setDeviceInfo(ImprovTypes::ChipFamily::CF_ESP32, CW_FW_NAME, CW_FW_VERSION, "Clockwise");
    ```
@@ -167,7 +167,7 @@ According to the [ESP-Web-Tools documentation](https://esphome.github.io/esp-web
 
 ### Root Cause 3: Stored Bad Credentials Bypassing Serial Setup
 
-In [`WiFiController.h`](firmware/lib/cw-commons/WiFiController.h):
+In [`WiFiController.h`](../firmware/lib/cw-commons/WiFiController.h):
 * If a board was previously configured with Wi-Fi credentials that are no longer valid (e.g., changed router password, moved location) and was reflashed without checking "Erase all data":
 * `improvSerial.tryConnectToWifi(...)` runs for ~10 seconds (20 retries × 500 ms) and fails.
 * Upon failure, the original code did not provide any opportunity to reconfigure via Improv Serial; it immediately dropped into the blocking `alternativeSetupMethod()` (AP mode).

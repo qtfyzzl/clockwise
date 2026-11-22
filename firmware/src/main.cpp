@@ -236,6 +236,16 @@ static uint16_t wifiRetryCount = 0;
 
 static void retryWiFiIfOffline()
 {
+  // 关键：配网状态机（Connecting / ImprovWait / ApPortal）运行期间，绝不能
+  // 在这里抢 WiFi 模式。否则会出现「AP 配网页刚切到 WIFI_AP，这里又切回
+  // WIFI_AP_STA 并 WiFi.begin(旧凭据)」的互相打架：
+  //   - 「Clockwise-Wifi」热点时有时无
+  //   - 配网页扫描不到任何 WiFi（STA 连接进行中，AP 信道扫描被阻塞）
+  //   - 日志反复打印 "wifi:sta is connecting, cannot set config"
+  // 配网期间由状态机独占 WiFi，这里一律跳过。
+  if (wifi.setupFsm.isSettingUp())
+    return;
+
   if (WiFi.status() == WL_CONNECTED)
     return;
 

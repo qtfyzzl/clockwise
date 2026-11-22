@@ -94,6 +94,11 @@ void WiFiController::startApPortal()
   // 重新连 STA，不影响正常使用。
   WiFi.disconnect(true);   // 断开并清除自动重连，避免 STA 抢占信道
   WiFi.mode(WIFI_AP);
+  // 关键：disconnect + mode 切换在 ESP32 上是异步的，若 STA 还处于
+  // 「正在连接」状态（日志里的 "wifi:sta is connecting, cannot set config"），
+  // 立即 startConfigPortal 会导致 AP 信道扫描被 STA 抢走 → 配网页扫不到 WiFi。
+  // 这里加一个短延时，等 STA 彻底停稳、AP 就绪，再启动配网页。
+  delay(200);
 
   wm.setConfigPortalBlocking(false);
   wm.setConfigPortalTimeout(0); // timeout is owned by WiFiSetupStateMachine

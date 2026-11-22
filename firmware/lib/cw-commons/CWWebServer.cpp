@@ -92,7 +92,11 @@ void ClockwiseWebServer::writeChunked(WiFiClient &client, const uint8_t *data, s
     }
     p += written;
     remaining -= written;
-    delay(0);           // 让 WiFi 任务把缓冲区发出去
+    // 关键：这里绝不能 delay(0)。
+    // delay(0) 会让出当前 loop() 迭代，下一块要等下一轮 loop 的
+    // clockface->update()（全屏刷新）跑完才继续发。13.9KB 的页面被切成
+    // 7 块、跨 7 轮 loop，手机上（STA 高 RTT）就变成「卡半天」。
+    // client.write() 在发送缓冲满时本身会阻塞到能写，连续写才快。
   }
 }
 
@@ -456,10 +460,7 @@ void ClockwiseWebServer::sendThemeFile(WiFiClient &client, const String &name)
         break;
       delay(1);
     }
-    else
-    {
-      delay(0);
-    }
+    // 这里同样不能 delay(0)：主题预览（JSON）也要连续发，避免手机卡顿。
   }
 
   f.close();

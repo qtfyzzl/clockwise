@@ -366,7 +366,11 @@ void ClockwiseWebServer::applySetting(const String &key, const String &value)
   else if (key == p->PREF_AUTO_ROTATE)
     p->autoRotate = (value == "1");
   else if (key == p->PREF_CLOCKFACE_ENGINE)
-    p->clockfaceEngine = value;   // canvas / native-mario，重启生效
+  {
+    p->clockfaceEngine = value;   // canvas / native-mario，热切换（不重启）
+    // 通知主循环重建 clockface。空串或与当前相同则不触发。
+    pendingEngine = value;
+  }
   else if (key == "autoBright")                 // 形如 autoBright=0010,0800
   {
     p->autoBrightMin = value.substring(0, 4).toInt();

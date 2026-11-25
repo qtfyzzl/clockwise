@@ -102,6 +102,41 @@ static bool setupClockfaceSafely(IClockface *cf, CWDateTime *dt)
   }
 }
 
+// 热切换表盘引擎：delete 旧 clockface → 清屏 → 创建新引擎 → setup。
+// 与开机 setup 走同一套 createClockface + setupClockfaceSafely，行为一致。
+// 失败（堆耗尽/异常）时降级到 native-mario，并回写 NVS，避免下次开机又踩坑。
+static void switchClockfaceEngine(const String &engine)
+{
+  Serial.printf("[App] 热切换表盘: %s -> %s\n",
+                ClockwiseParams::getInstance()->clockfaceEngine.c_str(), engine.c_str());
+
+  if (clockface)
+  {
+    delete clockface;
+    clockface = nullptr;
+  }
+
+  // 清屏：旧表盘的残留像素（尤其 canvas 的 PNG/精灵）要抹掉
+  dma_display->fillRect(0, 0, 64, 64, 0);
+
+  clockface = createClockface(engine, dma_display);
+  if (setupClockfaceSafely(clockface, &cwDateTime))
+  {
+    ClockwiseParams::getInstance()->clockfaceEngine = engine;
+    ClockwiseParams::getInstance()->save();
+    Serial.printf("[App] 表盘已切换为 %s（无需重启）\n", engine.c_str());
+  }
+  else
+  {
+    delete clockface;
+    clockface = createClockface(ENGINE_NATIVE_MARIO, dma_display);
+    ClockwiseParams::getInstance()->clockfaceEngine = ENGINE_NATIVE_MARIO;
+    ClockwiseParams::getInstance()->save();
+    clockface->setup(&cwDateTime);
+    Serial.println("[App] 热切换失败，降级到 native-mario");
+  }
+}
+
 bool isValidI2SSpeed(uint32_t speed) {
   return speed == 8000000 || speed == 16000000 || speed == 20000000;
 }
@@ -523,6 +558,18 @@ void loop()
     ClockwiseWebServer::getInstance()->handleHttpRequest();
     ArduinoOTA.handle();   // 处理 OTA 会话（内部非阻塞）
     ezt::events();
+  }
+
+  // 热切换表盘：配置页 /set clockfaceEngine 后，这里检测并重建（不重启设备）。
+  {
+    String &pending = ClockwiseWebServer::getInstance()->pendingEngine;
+    if (pending.length() > 0)
+    {
+      const String target = pending;
+      pending = "";   // 先清，避免切换失败时死循环
+      if (target != ClockwiseParams::getInstance()->clockfaceEngine)
+        switchClockfaceEngine(target);
+    }
   }
 
   if (wifi.connectionSucessfulOnce)

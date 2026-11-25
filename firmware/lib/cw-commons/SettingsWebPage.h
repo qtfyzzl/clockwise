@@ -567,17 +567,13 @@ function renderEngineList(){
   });
 }
 
-// 切换主题引擎（写 NVS，重启生效）
+// 切换主题引擎（写 NVS，立即热切换，无需重启）
 function pickEngine(id){
   if (id === (S['clockfaceengine'] || 'canvas')) return;
-  if (!confirm('切换到「' + id + '」需要重启设备，确定？')) return;
   setPref('clockfaceEngine', id);
-  // setPref 已同步 S 缓存，这里立即重渲染，让「使用中」标记立刻移到新引擎，
-  // 即使下面用户取消重启，界面也不会停留在旧模式。
+  // setPref 已同步 S 缓存，这里立即重渲染，让「使用中」标记立刻移到新引擎。
   renderEngineList();
-  setTimeout(function(){
-    if (confirm('已切换，现在重启生效？')) restartDevice();
-  }, 700);
+  toast('已切换到「' + id + '」，无需重启');
 }
 
 // 上传固件并升级。
@@ -796,7 +792,7 @@ function render(){
   html += '</div>';
 
   /* ---------- 主题引擎（始终显示，决定下面显示哪一组） ---------- */
-  html += '<div class="group"><h2>主题引擎</h2><span>决定用哪种方式渲染画面，切换后重启生效</span></div><div class="grid">';
+  html += '<div class="group"><h2>主题引擎</h2><span>决定用哪种方式渲染画面，切换立即生效、无需重启</span></div><div class="grid">';
 
   html += card('渲染方式',
     '下面列出这个固件里内置的全部引擎，点一个即切换。<br>' +

@@ -47,6 +47,10 @@ struct ClockwiseWebServer
   // 置 true 后下一次 handleHttpRequest() 会重启设备（响应已经先发出去）
   bool force_restart = false;
 
+  // 热切换引擎：/set clockfaceEngine 时写入目标引擎名，主循环检测到非空就
+  // 重建 clockface（不重启设备）。空字符串 = 无切换请求。由 main.cpp 消费后清空。
+  String pendingEngine;
+
   static ClockwiseWebServer *getInstance();
 
   void startWebServer();

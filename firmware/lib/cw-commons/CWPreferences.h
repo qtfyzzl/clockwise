@@ -149,7 +149,7 @@ struct ClockwiseParams
         // 全暗约 40，全亮约 3700，取 800 作为"已足够亮"的拐点。
         autoBrightMax = preferences.getUInt(PREF_DISPLAY_ABC_MAX, 800);
         ldrPin = preferences.getUInt(PREF_LDR_PIN, 35);        
-        timeZone = preferences.getString(PREF_TIME_ZONE, "America/Sao_Paulo");
+        timeZone = preferences.getString(PREF_TIME_ZONE, "Asia/Shanghai");
         wifiSsid = preferences.getString(PREF_WIFI_SSID, "");
         wifiPwd = preferences.getString(PREF_WIFI_PASSWORD, "");
         ntpServer = preferences.getString(PREF_NTP_SERVER, "time.google.com");

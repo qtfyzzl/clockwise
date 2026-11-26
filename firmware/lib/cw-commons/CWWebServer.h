@@ -51,6 +51,14 @@ struct ClockwiseWebServer
   // 重建 clockface（不重启设备）。空字符串 = 无切换请求。由 main.cpp 消费后清空。
   String pendingEngine;
 
+  // 重载 canvas 主题：/set canvasFile 时置 true，主循环检测到后强制重建
+  // canvas 引擎（重新 deserializeDefinition 加载新主题 JSON），不重启设备。
+  bool pendingCanvasReload = false;
+
+  // 强制重建当前引擎：夜间策略退出时置 true（夜间用 clearScreen 清掉了
+  // canvas 静态背景，需要重建 clockface 恢复原主题画面），不重启设备。
+  bool pendingRebuild = false;
+
   static ClockwiseWebServer *getInstance();
 
   void startWebServer();

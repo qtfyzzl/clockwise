@@ -2,6 +2,7 @@
 
 #include <time.h>
 #include <picopixel.h>
+#include <ezTime.h>   // ezt::now()：ezTime 软件时间，NTP 同步后有效（系统 time() 恒为 1970）
 
 namespace
 {
@@ -53,21 +54,25 @@ namespace
 
 namespace offline_clock
 {
-  void draw(MatrixPanel_I2S_DMA *display)
+  void draw(MatrixPanel_I2S_DMA *display, bool showLabel)
   {
     if (!display)
       return;
 
-    display->fillRect(0, 0, 64, 64, 0);
+    // 用 clearScreen() 而不是 fillRect：直接清物理 framebuffer，
+    // 不受 setRotation 坐标变换影响，能彻底抹掉 canvas 主题残留的静态内容
+    //（snoopy 左上图、zzz 精灵、右上 datetime 等）。
+    display->clearScreen();
 
-    // 时间是否可信：NTP 同步过才会有 2023 年以后的时间
-    const bool timeValid = (time(nullptr) > 1700000000L);
+    // 时间是否可信：用 ezTime 的软件时间（ezt::now()），不是系统 time()。
+    // ezTime 的 setTime() 只更新内部 _last_sync_time，不调用 settimeofday，
+    // 所以系统 time(nullptr) 恒为 1970，会误判为「时间无效」显示成 --:--。
+    const time_t now = ezt::now();
+    const bool timeValid = (now > 1700000000L);
     int8_t h1 = -1, h2 = -1, m1 = -1, m2 = -1;
 
     if (timeValid)
     {
-      // 用 localtime_r 而不是 cwDateTime：离线时 cwDateTime.begin() 可能还没跑过
-      const time_t now = time(nullptr);
       struct tm lt;
       localtime_r(&now, &lt);
       h1 = lt.tm_hour / 10;
@@ -86,6 +91,7 @@ namespace offline_clock
     drawDigit(display, colonX + COLON_W + GAP, TOP_Y, m1);
     drawDigit(display, colonX + COLON_W + GAP + DIGIT_W + GAP, TOP_Y, m2);
 
-    drawCentered(display, timeValid ? "no wifi" : "no wifi / no time", 52, 0xF800);
+    if (showLabel)
+      drawCentered(display, timeValid ? "no wifi" : "no wifi / no time", 52, 0xF800);
   }
 }

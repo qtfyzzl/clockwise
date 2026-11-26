@@ -488,38 +488,9 @@ bool CanvasClockface::deserializeDefinition()
     }
   }
 
-  // ---- 2) 本地没有，走远程 ----
-  if (params->canvasServer.isEmpty())
-  {
-    drawSplashScreen(0xC904, "No local theme");
-    return false;
-  }
-
-  WiFiClientSecure client;
-
-  String server = params->canvasServer;
-  String file = String("/" + params->canvasFile + ".json");
-  uint16_t port = 4443;
-
-  if (server.startsWith("raw.")) {
-    port = 443;
-    file = String("/robegamesios/clock-club/main/shared" + file);
-  }
-
-  ClockwiseHttpClient::getInstance()->httpGet(&client, server.c_str(), file.c_str(), port);
-
-  DeserializationError error = deserializeJson(doc, client);
-  if (error)
-  {
-    drawSplashScreen(0xC904, "Error! Check logs");
-
-    Serial.print("deserializeJson() failed: ");
-    Serial.println(error.c_str());
-    client.stop();
-    return false;
-  }
-
-  Serial.printf("[Canvas] Building clockface '%s' by %s, version %d\n", doc["name"].as<const char *>(), doc["author"].as<const char *>(), doc["version"].as<const uint16_t>());
-  client.stop();
-  return true;
+  // ---- 2) 本地没有：直接报错，不再远程下载 ----
+  // 已删除远程下载分支（canvasServer）：远程回落的 TLS 握手不受 setTimeout 控制，
+  // 会把主循环堵死几分钟（历史踩坑）。主题统一从设置页上传到 SPIFFS 本地加载。
+  drawSplashScreen(0xC904, "No local theme");
+  return false;
 }

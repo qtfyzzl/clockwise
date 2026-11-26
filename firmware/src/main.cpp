@@ -8,9 +8,7 @@
 #include <IClockface.h>
 #include "MarioClockface.h"
 #include "PacmanClockface.h"
-#include "PacmanClockface.h"
 #include "CanvasClockface.h"
-#include "WinterGamesClockface.h"
 // Commons
 #include <WiFiController.h>
 #include <CWDateTime.h>
@@ -19,6 +17,7 @@
 #include <StatusController.h>
 #include <picopixel.h>
 #include <ArduinoOTA.h>   // 命令行空中升级（pio run -t upload --upload-port <ip>）
+#include <esp_ota_ops.h>   // 查询当前运行分区，验证 OTA 是否真的切换了 app 分区
 
 // 本工程内聚模块
 #include "OfflineClock.h"
@@ -54,17 +53,15 @@ uint8_t currentBrightSlot = -1;
 // ---------------- 主题引擎 ----------------
 // native-mario : 图片是编译进 flash 的 RGB565 数组，运行时零 RAM 开销（原生模式）
 // canvas       : 运行时解析 SPIFFS 里的 JSON，可上传任意主题，受 16KB/堆 限制（画布模式）
-// 引擎标识存在 NVS 的 clockfaceEngine 里，切换后重启生效。
+// 引擎标识存在 NVS 的 clockfaceEngine 里，切换后热生效。
 const char *ENGINE_NATIVE_MARIO = "native-mario";
 const char *ENGINE_NATIVE_PACMAN = "native-pacman";
-const char *ENGINE_NATIVE_WINTER = "native-wintergames";
 const char *ENGINE_CANVAS = "canvas";
 
 static const char *engineClockfaceId(const String &engine)
 {
   if (engine == ENGINE_NATIVE_MARIO) return "cw-cf-0x01";
   if (engine == ENGINE_NATIVE_PACMAN) return "cw-cf-0x05";
-  if (engine == ENGINE_NATIVE_WINTER) return "cw-cf-0x08";
   return "cw-cf-0x07";   // 其余一律走 Canvas
 }
 
@@ -74,8 +71,6 @@ static IClockface *createClockface(const String &engine, Adafruit_GFX *display)
     return new MarioClockface(display);
   if (engine == ENGINE_NATIVE_PACMAN)
     return new PacmanClockface(display);
-  if (engine == ENGINE_NATIVE_WINTER)
-    return new WinterGamesClockface(display);
   return new CanvasClockface(display);
 }
 
@@ -124,6 +119,8 @@ static void switchClockfaceEngine(const String &engine)
   {
     ClockwiseParams::getInstance()->clockfaceEngine = engine;
     ClockwiseParams::getInstance()->save();
+    // 同步 clockfaceName，设置页据此判断当前主题（热切换后也要更新）
+    ClockwiseWebServer::getInstance()->clockfaceName = engineClockfaceId(engine);
     Serial.printf("[App] 表盘已切换为 %s（无需重启）\n", engine.c_str());
   }
   else
@@ -132,6 +129,7 @@ static void switchClockfaceEngine(const String &engine)
     clockface = createClockface(ENGINE_NATIVE_MARIO, dma_display);
     ClockwiseParams::getInstance()->clockfaceEngine = ENGINE_NATIVE_MARIO;
     ClockwiseParams::getInstance()->save();
+    ClockwiseWebServer::getInstance()->clockfaceName = engineClockfaceId(ENGINE_NATIVE_MARIO);
     clockface->setup(&cwDateTime);
     Serial.println("[App] 热切换失败，降级到 native-mario");
   }
@@ -252,6 +250,94 @@ void automaticBrightControl()
   }
 }
 
+// ---------------- 夜间策略 ----------------
+// 夜间（环境暗）降低屏幕干扰，以 LDR 光敏读数判断，而非固定时间：
+//   1 = 关 LED（全黑，睡觉不被打扰）
+//   2 = 超大时钟（复用 offline_clock 的 7 段大数字，只画时间不画提示）
+// 触发条件：analogRead(ldrPin) < nightLdrThreshold（环境足够暗）。
+// 电路 3V3—LDR—ADC—10k—GND，光越强读数越大，所以读数低 = 环境暗。
+//
+// 双重防抖，避免 LDR 噪声/环境光抖动导致夜间状态反复进出、屏幕闪烁：
+//   1. 迟滞：进入需 < 阈值，退出需 > 阈值 + 余量
+//   2. 时间：状态候选需「持续 N 秒」才真正切换（瞬时的光闪不触发）
+
+#define NIGHT_HYSTERESIS 120                 // 进入/退出阈值的迟滞余量
+#define NIGHT_SETTLE_MS 5000                 // 候选状态需持续 5 秒才切换
+
+// 返回 true 表示「夜间策略接管了显示」，调用方应跳过正常渲染
+static bool applyNightStrategy()
+{
+  ClockwiseParams *p = ClockwiseParams::getInstance();
+  if (p->nightMode == 0)
+    return false;
+
+  const int16_t raw = (int16_t)analogRead(p->ldrPin);
+  const int16_t threshold = (int16_t)p->nightLdrThreshold;
+
+  // 迟滞：已在夜间时，要「明显变亮」才退出；未夜间时，要「足够暗」才进入。
+  // 退出阈值 = threshold + NIGHT_HYSTERESIS，但要钳位到 ADC 上限 4095，
+  // 否则阈值设得高时（如 4095），退出阈值 4215 永远达不到 → 亮度升高也退不出夜间。
+  int16_t exitThreshold = threshold + NIGHT_HYSTERESIS;
+  if (exitThreshold > 4095) exitThreshold = 4095;
+
+  static bool inNight = false;
+  bool candidate;
+  if (inNight)
+    candidate = (raw < exitThreshold);   // 退出需 > 阈值+余量（钳位后）
+  else
+    candidate = (raw < threshold);       // 进入需 < 阈值
+
+  // 时间防抖：候选状态需持续 NIGHT_SETTLE_MS 才切换
+  static bool lastCandidate = false;
+  static unsigned long candidateSince = 0;
+  if (candidate != lastCandidate)
+  {
+    lastCandidate = candidate;
+    candidateSince = millis();   // 候选变了，重新计时
+  }
+
+  if (candidate != inNight && (millis() - candidateSince) >= NIGHT_SETTLE_MS)
+  {
+    inNight = candidate;
+    Serial.printf("[Night] %s夜间（LDR=%d，阈值 %u，模式 %u）\n",
+                  inNight ? "进入" : "离开", raw,
+                  p->nightLdrThreshold, p->nightMode);
+
+    // 离开夜间时：重建 clockface 恢复原主题画面。
+    // 夜间超大时钟用 clearScreen() 清掉了 canvas 的静态背景（snoopy 图等），
+    // 这些只在 setup 时画一次，不重建的话退出后屏幕会黑/残缺。
+    // 通过 pendingRebuild 让主循环的切换块延迟重建（避免在 loop 里直接重入）。
+    if (!inNight)
+      ClockwiseWebServer::getInstance()->pendingRebuild = true;
+  }
+
+  if (!inNight)
+    return false;
+
+  if (p->nightMode == 1)
+  {
+    // 关 LED：直接覆盖亮度为 0。离开夜间后自动亮度/正常渲染会恢复。
+    dma_display->setBrightness8(0);
+    return true;
+  }
+
+  if (p->nightMode == 2)
+  {
+    // 超大时钟：每秒重画一次 7 段大数字。
+    // 数字是分钟级变化，每秒刷新足够；频率太高（如 200ms）会让 clearScreen()
+    // 到重画之间出现全黑间隙，形成肉眼可见的频闪。
+    static unsigned long lastNightDraw = 0;
+    if (millis() - lastNightDraw >= 1000)
+    {
+      lastNightDraw = millis();
+      offline_clock::draw(dma_display, false);   // 只画时间，不画 "no wifi"
+    }
+    return true;
+  }
+
+  return false;
+}
+
 // ---------------- 离线兜底 ----------------
 // WiFi 一直连不上时 clockface->setup() 永远不会被调用，屏幕会停在静态提示上。
 // 这里在主循环里兜一层：超时后自己画一个可辨识的界面。
@@ -302,7 +388,7 @@ static void retryWiFiIfOffline()
 }
 
 // ---------------- 自动换盘 ----------------
-// 每天 00:00 切到下一个本地主题（按名字字母序循环），切换后重启一次。
+// 每天 00:00 切到下一个本地主题（按名字字母序循环），热切换、不重启。
 // 具体查找/切换逻辑在 CWWebServer 里，和「立即切换」按钮共用同一套实现。
 static String lastRotateDay = "";
 
@@ -329,15 +415,22 @@ static void checkAutoRotate()
     return;
   }
 
-  Serial.println("[App] 自动换盘完成，重启生效");
-  delay(300);
-  ESP.restart();
+  // 热切换：不重启，通知主循环重载 canvas 主题
+  Serial.println("[App] 自动换盘完成，热切换中（无需重启）");
+  ClockwiseWebServer::getInstance()->pendingCanvasReload = true;
 }
 
 void setup()
 {
   Serial.begin(115200);
   pinMode(ESP32_LED_BUILTIN, OUTPUT);
+
+  // 打印本次从哪个 app 分区启动：这是验证 OTA 是否成功的硬证据。
+  // OTA 写入「空闲分区」并切换后，重启会看到分区名从 app0 ↔ app1 交替。
+  const esp_partition_t *running = esp_ota_get_running_partition();
+  Serial.printf("[Boot] 运行分区: %s (地址 0x%06X)\n",
+                running ? running->label : "?",
+                running ? (unsigned)running->address : 0);
 
   StatusController::getInstance()->blink_led(2, 50);
 
@@ -371,8 +464,7 @@ void setup()
   ClockwiseWebServer::getInstance()->engineCatalog =
       "canvas|画布模式（Canvas）\n"
       "native-mario|Mario（原生）\n"
-      "native-pacman|吃豆人（原生）\n"
-      "native-wintergames|长春大冬会（原生）\n";
+      "native-pacman|吃豆人（原生）\n";
   Serial.printf("[App] 主题引擎: %s（对应 %s）\n", engine.c_str(), engineClockfaceId(engine));
 
   // 尽早恢复时间：没有网络时系统时间是 1970，离线页面就只能显示 --:--
@@ -563,6 +655,24 @@ void loop()
   // 热切换表盘：配置页 /set clockfaceEngine 后，这里检测并重建（不重启设备）。
   {
     String &pending = ClockwiseWebServer::getInstance()->pendingEngine;
+    bool &reloadCanvas = ClockwiseWebServer::getInstance()->pendingCanvasReload;
+    bool &rebuild = ClockwiseWebServer::getInstance()->pendingRebuild;
+
+    // 夜间策略退出：强制重建当前引擎，恢复原主题画面（clearScreen 清掉了静态背景）
+    if (rebuild)
+    {
+      rebuild = false;
+      switchClockfaceEngine(ClockwiseParams::getInstance()->clockfaceEngine);
+    }
+
+    // canvas 主题文件切换：当前是 canvas 引擎时，强制重建 canvas 引擎重载主题
+    if (reloadCanvas)
+    {
+      reloadCanvas = false;
+      if (ClockwiseParams::getInstance()->clockfaceEngine == ENGINE_CANVAS)
+        switchClockfaceEngine(ENGINE_CANVAS);
+    }
+
     if (pending.length() > 0)
     {
       const String target = pending;
@@ -574,7 +684,11 @@ void loop()
 
   if (wifi.connectionSucessfulOnce)
   {
-    clockface->update();
+    // 夜间策略接管显示时，跳过普通表盘渲染（关LED或超大时钟会覆盖画面）
+    if (!applyNightStrategy())
+    {
+      clockface->update();
+    }
     checkAutoRotate();
   }
   else

@@ -33,7 +33,6 @@ struct ClockwiseParams
     const char* const PREF_NTP_SERVER = "ntpServer";
     const char* const PREF_CANVAS_FILE = "canvasFile";
     const char* const PREF_CLOCKFACE_ENGINE = "clockfaceEngine";
-    const char* const PREF_CANVAS_SERVER = "canvasServer";
     const char* const PREF_AUTO_ROTATE = "autoRotate";
     const char* const PREF_LAST_EPOCH = "lastEpoch";
     const char* const PREF_MANUAL_POSIX = "manualPosix";
@@ -48,7 +47,12 @@ struct ClockwiseParams
     const char* const PREF_CRASH_COUNT = "crashCount";
     // 上一次崩溃时的主题引擎 + 文件名，用于回退后在设置页提示用户「原主题已隔离」。
     const char* const PREF_CRASHED_ENGINE = "crashedEngine";
-    const char* const PREF_CRASHED_FILE = "crashedFile";    
+    const char* const PREF_CRASHED_FILE = "crashedFile";
+    // 夜间策略：0=关闭，1=夜间关 LED，2=夜间显示超大时钟
+    const char* const PREF_NIGHT_MODE = "nightMode";
+    // 夜间触发阈值：LDR 读数低于此值视为「环境暗」进入夜间（全暗约 40，全亮约 3700）
+    // 注意：key 名不能超 15 字符（NVS 上限），所以用 nightLdr 而非 nightLdrThreshold
+    const char* const PREF_NIGHT_LDR = "nightLdr";    
 
     bool swapBlueGreen;
     bool swapBlueRed;
@@ -65,9 +69,6 @@ struct ClockwiseParams
     // 主题引擎："canvas"（解析 JSON，可上传任意主题）
     // 或 "native-mario"（图片编译进 flash，零 RAM 开销）
     String clockfaceEngine;
-    // 主题引擎："canvas"（解析 JSON，可上传任意主题）
-    // 或 "native-mario"（图片编译进 flash，零 RAM 开销）
-    String canvasServer;
     bool autoRotate;
     // 最后一次已知正确的 UTC 时间戳（秒）。没网启动时用它恢复时间，
     // 否则系统时间是 1970，离线页面只能显示 --:--。
@@ -83,6 +84,9 @@ struct ClockwiseParams
     uint8_t crashCount;
     String crashedEngine;
     String crashedFile;
+    // 夜间策略
+    uint8_t nightMode;      // 0=关 1=关LED 2=超大时钟
+    uint16_t nightLdrThreshold; // LDR 读数低于此值触发夜间，默认 200
 
     ClockwiseParams() {
         preferences.begin("clockwise", false); 
@@ -118,8 +122,6 @@ struct ClockwiseParams
         preferences.putString(PREF_NTP_SERVER, ntpServer);
         preferences.putString(PREF_CANVAS_FILE, canvasFile);
         preferences.putString(PREF_CLOCKFACE_ENGINE, clockfaceEngine);
-        preferences.putString(PREF_CLOCKFACE_ENGINE, clockfaceEngine);
-        preferences.putString(PREF_CANVAS_SERVER, canvasServer);
         preferences.putBool(PREF_AUTO_ROTATE, autoRotate);
         preferences.putULong(PREF_LAST_EPOCH, lastEpoch);
         preferences.putString(PREF_MANUAL_POSIX, manualPosix);
@@ -132,6 +134,8 @@ struct ClockwiseParams
         preferences.putUChar(PREF_CRASH_COUNT, crashCount);
         preferences.putString(PREF_CRASHED_ENGINE, crashedEngine);
         preferences.putString(PREF_CRASHED_FILE, crashedFile);
+        preferences.putUChar(PREF_NIGHT_MODE, nightMode);
+        preferences.putUInt(PREF_NIGHT_LDR, nightLdrThreshold);
     }
 
     void load()
@@ -158,7 +162,6 @@ struct ClockwiseParams
         clockfaceEngine = preferences.getString(PREF_CLOCKFACE_ENGINE, "canvas");
         // 默认沿用 Canvas：老设备升级后行为不变
         clockfaceEngine = preferences.getString(PREF_CLOCKFACE_ENGINE, "canvas");
-        canvasServer = preferences.getString(PREF_CANVAS_SERVER, "raw.githubusercontent.com");
         autoRotate = preferences.getBool(PREF_AUTO_ROTATE, false);
         lastEpoch = preferences.getULong(PREF_LAST_EPOCH, 0);
         manualPosix = preferences.getString(PREF_MANUAL_POSIX, "");
@@ -171,6 +174,8 @@ struct ClockwiseParams
         crashCount = preferences.getUChar(PREF_CRASH_COUNT, 0);
         crashedEngine = preferences.getString(PREF_CRASHED_ENGINE, "");
         crashedFile = preferences.getString(PREF_CRASHED_FILE, "");
+        nightMode = preferences.getUChar(PREF_NIGHT_MODE, 0);
+        nightLdrThreshold = preferences.getUInt(PREF_NIGHT_LDR, 200);
     }
 
 };

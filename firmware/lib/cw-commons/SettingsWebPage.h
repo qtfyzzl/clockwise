@@ -158,7 +158,7 @@ const char SETTINGS_PAGE[] PROGMEM = R""""(
 </main>
 
 <footer>
-  修改后需点右下角「保存」，然后<b>重启设备</b>才会生效。
+  大部分配置修改后<b>立即生效</b>；仅 WiFi、时区等少数需重启设备。
 </footer>
 
 <div id="toast">已保存</div>
@@ -240,7 +240,7 @@ function setPref(key, value){
 
 function toast(msg){
   var t = document.getElementById('toast');
-  t.textContent = msg || '已保存，重启后生效';
+  t.textContent = msg || '已保存';
   t.classList.add('show');
   clearTimeout(t._h);
   t._h = setTimeout(function(){ t.classList.remove('show'); }, 1800);
@@ -481,10 +481,10 @@ function previewTheme(name){
   });
 }
 
-// 立即切到下一个本地主题（设备会重启）
+// 立即切到下一个本地主题（热切换，无需重启）
 function rotateNow(){  var xhr = new XMLHttpRequest();
   xhr.onreadystatechange = function(){
-    if (this.readyState === 4) toast('正在切换到下一个主题…');
+    if (this.readyState === 4) toast('已切换到下一个主题');
   };
   xhr.open('POST', '/rotate', true);
   xhr.send();
@@ -495,7 +495,7 @@ function pickTheme(name){
   document.getElementById('canvasFile').value = name;
   setPref('canvasFile', name);
   previewTheme(name);
-  toast('已选择「' + name + '」，重启后生效');
+  toast('已选择「' + name + '」，无需重启');
 }
 
 // 存储（SPIFFS）状态：挂载失败时主题存不进去，要把原因讲清楚，
@@ -571,9 +571,9 @@ function renderEngineList(){
 function pickEngine(id){
   if (id === (S['clockfaceengine'] || 'canvas')) return;
   setPref('clockfaceEngine', id);
-  // setPref 已同步 S 缓存，这里立即重渲染，让「使用中」标记立刻移到新引擎。
-  renderEngineList();
-  toast('已切换到「' + id + '」，无需重启');
+  // setPref 已同步 S 缓存；整体 re-render，让 Canvas 子列表根据新引擎显示/隐藏，
+  // 引擎按钮的「使用中」标记也一并更新。
+  render();
 }
 
 // 上传固件并升级。
@@ -675,8 +675,8 @@ function uploadTheme(input){
     xhr.onreadystatechange = function(){
       if (this.readyState !== 4) return;
       if (this.status === 204) {
-        status.textContent = '已保存到设备（' + text.length + ' 字节），重启后生效';
-        toast('上传成功，重启后生效');
+        status.textContent = '已保存到设备（' + text.length + ' 字节），下拉选择即生效';
+        toast('上传成功');
         refreshThemes();
       } else {
         status.style.color = '#c0392b';
@@ -698,6 +698,8 @@ function render(){
   var abMax    = S['autobrightmax'] || '0';
   var rot      = S['displayrotation'] || '0';
   var spd      = S['i2cspeed'] || '8000000';
+  var nightMode= S['nightmode'] || '0';
+  var nightLdr = S['nightldr'] || '200';
   CLOCKFACE    = S['clockface_name'] || '';
 
   // 顶栏信息
@@ -705,9 +707,10 @@ function render(){
   document.getElementById('chip-ssid').innerHTML = 'WiFi <b>' + esc(S['wifissid'] || '未连接') + '</b>';
   // 顶栏显示"当前实际在用的主题"：Canvas 引擎下是 canvasFile，其它引擎直接显示引擎名
   var engineNow = (S['clockfaceengine'] || 'canvas');
-  var themeLabel = (CLOCKFACE === 'cw-cf-0x07')
+  var isCanvas = (engineNow === 'canvas');
+  var themeLabel = isCanvas
       ? (S['canvasfile'] || '未选择')
-      : (engineNow === 'native-mario' ? 'Mario（原生）' : (CLOCKFACE || '—'));
+      : (engineNow === 'native-mario' ? 'Mario（原生）' : (engineNow === 'native-pacman' ? '吃豆人（原生）' : (CLOCKFACE || '—')));
   document.getElementById('chip-cf').innerHTML   = '主题 <b>' + esc(themeLabel) + '</b>';
 
   var html = '';
@@ -761,6 +764,21 @@ function render(){
     '</select>',
     "setPref('i2cSpeed', document.getElementById('speed').value)");
 
+  html += card('夜间策略',
+    '按环境亮度（光敏电阻）判断夜间，环境变暗自动切换。<b>关闭</b>=正常显示；' +
+    '<b>关闭 LED</b>=全黑；<b>超大时钟</b>=只显示 7 段大数字时间。',
+    '<select id="nightMode">' +
+      [['0','关闭'],['1','夜间关闭 LED'],['2','夜间超大时钟']].map(function(o){
+        return '<option value="' + o[0] + '"' + (nightMode === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+      }).join('') +
+    '</select>' +
+    '<div style="margin-top:8px">' +
+      '<span class="lbl">亮度阈值（LDR 读数低于此值视为夜间，全暗约 40 / 全亮约 3700）</span>' +
+      '<input type="number" id="nightLdr" min="0" max="4095" value="' + esc(nightLdr) + '">' +
+    '</div>',
+    "setPref('nightMode', document.getElementById('nightMode').value);" +
+    "setPref('nightLdr', document.getElementById('nightLdr').value)");
+
   html += '</div>';
 
   /* ---------- 时间 ---------- */
@@ -806,19 +824,13 @@ function render(){
 
   html += '</div>';
 
-  /* ---------- Canvas 主题（仅 cw-cf-0x07） ---------- */
-  if (CLOCKFACE === 'cw-cf-0x07') {
+  /* ---------- Canvas 主题（当前引擎是 canvas 时显示） ---------- */
+  if (isCanvas) {
     html += '<div class="group"><h2>Canvas 主题</h2><span>仅当前使用 Canvas 主题时生效</span></div><div class="grid">';
 
-    html += card('主题服务器地址',
-      '存放主题 JSON 的服务器。<b>填 <code>raw.</code> 开头会自动指向官方 clock-club 仓库</b>；' +
-      '填局域网 IP 则从本地 HTTPS 4443 端口读取。',
-      '<input type="text" id="canvasServer" value="' + esc(S['canvasserver'] || '') + '" placeholder="192.168.1.20">',
-      "setPref('canvasServer', document.getElementById('canvasServer').value)");
-
     html += card('主题描述文件',
-      '当前使用的主题名（<b>不带 .json</b>）。设备先找本地闪存，找不到才去上面的服务器拉。' +
-      '下面的下拉列表是从设备闪存里读出来的。',
+      '当前使用的主题名（<b>不带 .json</b>）。主题统一从设备闪存（SPIFFS）本地加载，' +
+      '下面的下拉列表就是从闪存里读出来的。',
       '<input type="text" id="canvasFile" value="' + esc(S['canvasfile'] || '') + '" placeholder="my-theme">' +
       '<select id="themeList" onchange="pickTheme(this.value)" style="margin-top:8px">' +
       '<option value="">读取中…</option></select>' +
@@ -870,7 +882,7 @@ function render(){
     var rot = (S['autorotate'] === '1');
     html += card('自动更换表盘',
       '每天 <b>00:00</b> 自动切到下一个本地主题（按名字字母序循环）。' +
-      '设备上至少要有两个本地主题才会生效。切换后会重启一次。',
+      '设备上至少要有两个本地主题才会生效。切换立即生效、无需重启。',
       '<select id="autoRotate">' +
         '<option value="0"' + (!rot ? ' selected' : '') + '>不自动切换</option>' +
         '<option value="1"' + (rot ? ' selected' : '') + '>每天 0 点自动切换</option>' +

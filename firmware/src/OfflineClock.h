@@ -17,6 +17,7 @@
 
 namespace offline_clock
 {
-  // 在给定面板上画一帧（调用方负责决定何时画、多久画一次）
-  void draw(MatrixPanel_I2S_DMA *display);
+  // 在给定面板上画一帧（调用方负责决定何时画、多久画一次）。
+  // showLabel=false 时只画大数字时钟，不画底部 "no wifi" 小字（夜间超大时钟用）。
+  void draw(MatrixPanel_I2S_DMA *display, bool showLabel = true);
 }

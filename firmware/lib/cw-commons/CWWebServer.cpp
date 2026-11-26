@@ -294,12 +294,12 @@ void ClockwiseWebServer::processRequest(WiFiClient &client, const String &method
     if (path == "/rotate")
     {
       const bool ok = rotateToNextTheme();
-      Serial.printf("[FS] 手动切换主题: %s\n", ok ? "成功，重启中" : "没有可切换的主题");
+      Serial.printf("[FS] 手动切换主题: %s\n", ok ? "成功，热切换中" : "没有可切换的主题");
       sendStatus(client, "HTTP/1.0 204 No Content");
       if (ok)
       {
-        delay(300);
-        ESP.restart();
+        // 热切换：不重启，通知主循环重载 canvas 主题
+        pendingCanvasReload = true;
       }
       return;
     }
@@ -350,9 +350,12 @@ void ClockwiseWebServer::applySetting(const String &key, const String &value)
   else if (key == p->PREF_NTP_SERVER)
     p->ntpServer = value;
   else if (key == p->PREF_CANVAS_FILE)
+  {
     p->canvasFile = value;
-  else if (key == p->PREF_CANVAS_SERVER)
-    p->canvasServer = value;
+    // canvas 主题文件切换：若当前正是 canvas 引擎，通知主循环重建 canvas
+    // 引擎，重新加载新主题 JSON（不重启设备）。
+    pendingCanvasReload = true;
+  }
   else if (key == p->PREF_MANUAL_POSIX)
     p->manualPosix = value;
   else if (key == p->PREF_DISPLAY_ROTATION)
@@ -365,10 +368,15 @@ void ClockwiseWebServer::applySetting(const String &key, const String &value)
     p->E_pin = value.toInt();
   else if (key == p->PREF_AUTO_ROTATE)
     p->autoRotate = (value == "1");
+  else if (key == p->PREF_NIGHT_MODE)
+    p->nightMode = (uint8_t)value.toInt();
+  else if (key == p->PREF_NIGHT_LDR)
+    p->nightLdrThreshold = (uint16_t)value.toInt();
   else if (key == p->PREF_CLOCKFACE_ENGINE)
   {
-    p->clockfaceEngine = value;   // canvas / native-mario，热切换（不重启）
-    // 通知主循环重建 clockface。空串或与当前相同则不触发。
+    // 只通知主循环重建 clockface，不在这里改 clockfaceEngine。
+    // 由 switchClockfaceEngine 统一更新 NVS 的 clockfaceEngine（成功才写，
+    // 失败降级到 mario），避免这里先改值导致主循环的「目标==当前」判断失效。
     pendingEngine = value;
   }
   else if (key == "autoBright")                 // 形如 autoBright=0010,0800
@@ -689,6 +697,8 @@ void ClockwiseWebServer::getCurrentSettings(WiFiClient &client)
   client.printf(HEADER_INT, p->PREF_I2CSPEED, p->i2cSpeed);
   client.printf(HEADER_INT, p->PREF_E_PIN, p->E_pin);
   client.printf(HEADER_INT, p->PREF_AUTO_ROTATE, p->autoRotate);
+  client.printf(HEADER_INT, p->PREF_NIGHT_MODE, p->nightMode);
+  client.printf(HEADER_INT, p->PREF_NIGHT_LDR, p->nightLdrThreshold);
 
   // 字符串类参数必须 percent 编码，否则中文（SSID 等）在响应头里会乱码
   client.printf(HEADER_STR, p->PREF_TIME_ZONE, urlEncode(p->timeZone.c_str()).c_str());
@@ -696,7 +706,6 @@ void ClockwiseWebServer::getCurrentSettings(WiFiClient &client)
   client.printf(HEADER_STR, p->PREF_NTP_SERVER, urlEncode(p->ntpServer.c_str()).c_str());
   client.printf(HEADER_STR, p->PREF_CANVAS_FILE, urlEncode(p->canvasFile.c_str()).c_str());
   client.printf(HEADER_STR, p->PREF_CLOCKFACE_ENGINE, urlEncode(p->clockfaceEngine.c_str()).c_str());
-  client.printf(HEADER_STR, p->PREF_CANVAS_SERVER, urlEncode(p->canvasServer.c_str()).c_str());
   client.printf(HEADER_STR, p->PREF_MANUAL_POSIX, urlEncode(p->manualPosix.c_str()).c_str());
 
   // 闪存占用与挂载状态：设置页据此提示"存储未就绪"

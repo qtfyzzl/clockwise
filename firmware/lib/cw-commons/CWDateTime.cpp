@@ -5,6 +5,7 @@ void CWDateTime::begin(const char *timeZone, bool use24format, const char *ntpSe
 {
   Serial.printf("[Time] NTP Server: %s, Timezone: %s\n", ntpServer, timeZone);
   ezt::setServer(String(ntpServer));
+  ezt::setDebug(ezDebugLevel_t::INFO);   // 开启 NTP 过程日志，排查同步失败原因
 
   if (strlen(posixTZ) > 1) {
     // An empty value still contains a null character so not empty is a value greater than 1.
@@ -53,8 +54,33 @@ void CWDateTime::begin(const char *timeZone, bool use24format, const char *ntpSe
   }
 
   this->use24hFormat = use24format;
-  ezt::updateNTP();
-  waitForSync(10);
+
+  // NTP 同步：主服务器失败时自动换备用服务器重试，确保时间能真正同步。
+  // 关键：用 ezt::now() 判断（ezTime 软件时间），不能用 time(nullptr)——
+  // ezTime 的 setTime() 只更新内部 _last_sync_time，不调用 settimeofday，
+  // 系统 time() 恒为 1970，会误判「所有服务器失败」。
+  const char *servers[] = { ntpServer, "ntp.aliyun.com", "ntp1.aliyun.com", "time.google.com" };
+  bool timeValid = false;
+  for (const char *srv : servers)
+  {
+    if (!srv || strlen(srv) == 0)
+      continue;
+    ezt::setServer(String(srv));
+    ezt::updateNTP();
+    waitForSync(8);
+    const unsigned long ezNow = (unsigned long)ezt::now();
+    if (ezNow > 1700000000UL)
+    {
+      timeValid = true;
+      Serial.printf("[Time] NTP 同步成功（%s），ezTime=%lu\n", srv, ezNow);
+      break;
+    }
+    Serial.printf("[Time] NTP 服务器 %s 未同步（ezTime=%lu），换下一个重试\n", srv, ezNow);
+  }
+
+  if (!timeValid)
+    Serial.printf("[Time] 所有 NTP 服务器均失败，ezTime 停留在 1970（%lu）\n",
+                  (unsigned long)ezt::now());
 }
 
 String CWDateTime::getFormattedTime()
